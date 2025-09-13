@@ -5,11 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation.compose.rememberNavController
 import com.fitghost.app.ui.AppNavHost
 import com.fitghost.app.ui.components.CupertinoNeumorphicBottomBar
 import com.fitghost.app.ui.theme.NeumorphicTheme
@@ -20,23 +18,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             NeumorphicTheme {
-                var selected by remember { mutableStateOf(0) }
-
-                Scaffold(
-                    bottomBar = {
-                        CupertinoNeumorphicBottomBar(
-                            selected = selected,
-                            onSelect = { selected = it }
-                        )
-                    }
-                ) { paddingValues ->
-                    AppNavHost(
-                        modifier = Modifier.padding(paddingValues),
-                        selectedIndex = selected,
-                        onNavigateIndex = { selected = it }
-                    )
-                }
+                AppContent()
             }
         }
+    }
+}
+
+@Composable
+fun AppContent() {
+    val navController = rememberNavController()
+
+    Scaffold(
+        bottomBar = {
+            CupertinoNeumorphicBottomBar(navController = navController)
+        }
+    ) { paddingValues ->
+        AppNavHost(
+            navController = navController,
+            modifier = Modifier.padding(paddingValues)
+        )
     }
 }

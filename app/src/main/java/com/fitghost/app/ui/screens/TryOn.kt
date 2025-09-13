@@ -5,27 +5,33 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImage
 import com.fitghost.app.ads.RewardedAdController
 import com.fitghost.app.data.CreditStore
 import com.fitghost.app.data.LocalImageStore
 import com.fitghost.app.data.TryOnRepository
 import com.fitghost.app.engine.GeminiTryOnEngine
+import com.fitghost.app.ui.components.NeumorphicSegmentedControl
 import com.fitghost.app.ui.theme.NeumorphicButton
 import com.fitghost.app.ui.theme.NeumorphicCard
-import com.fitghost.app.util.TryOnBridge
+import com.fitghost.app.ui.theme.NeumorphicCircularProgress
 import kotlinx.coroutines.launch
 
 @Composable
@@ -33,148 +39,143 @@ fun TryOnScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val creditStore = remember { CreditStore(context) }
-    val repo = remember {
-        TryOnRepository(context, creditStore, GeminiTryOnEngine(), LocalImageStore(context))
-    }
+    val repo = remember { TryOnRepository(context, creditStore, GeminiTryOnEngine(), LocalImageStore(context)) }
     val ad = remember { RewardedAdController(context) }
 
-    var picked by remember { mutableStateOf<android.net.Uri?>(null) }
-    var resultUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var modelUri by remember { mutableStateOf<Uri?>(null) }
+    var garmentUri by remember { mutableStateOf<Uri?>(null) }
+    var resultUri by remember { mutableStateOf<Uri?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var part by remember { mutableStateOf("TOP") }
-    var itemUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var showAdDialog by remember { mutableStateOf(false) }
 
-    val picker =
-            rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-                picked = uri
+    val modelPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> modelUri = uri }
+    val garmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> garmentUri = uri }
+
+    fun runTryOn() {
+        val mUri = modelUri ?: return
+        val gUri = garmentUri ?: return
+        scope.launch {
+            isLoading = true
+            message = ""
+            resultUri = null
+            val modelBmp = context.contentResolver.openInputStream(mUri)?.use { BitmapFactory.decodeStream(it) }
+            val garmentBmp = context.contentResolver.openInputStream(gUri)?.use { BitmapFactory.decodeStream(it) }
+
+            if (modelBmp == null || garmentBmp == null) {
+                message = "이미지를 불러오는데 실패했습니다."
+                isLoading = false
+                return@launch
             }
 
-    LaunchedEffect(Unit) {
-        TryOnBridge.consume()?.let { intent ->
-            part = intent.part.wire
-            // 추천 아이템 이미지 URI가 있으면 미리 선택
-            intent.itemImageUri?.let { s ->
-                runCatching { Uri.parse(s) }.getOrNull()?.let { parsed -> itemUri = parsed }
+            when (val result = repo.runTryOn(modelBmp, part, garmentBmp)) {
+                is TryOnRepository.Result.Success -> {
+                    resultUri = result.uri
+                    message = "성공! 갤러리에서 저장된 이미지를 확인하세요."
+                }
+                is TryOnRepository.Result.NoCredit -> {
+                    showAdDialog = true
+                }
+                is TryOnRepository.Result.Error -> {
+                    message = "오류: ${result.throwable.message}"
+                }
             }
-            if (intent.autoLaunchPicker) {
-                picker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-            }
+            isLoading = false
         }
     }
 
-    Column(Modifier.padding(16.dp)) {
-        Row {
-            NeumorphicButton(
-                    onClick = {
-                        picker.launch(
-                                PickVisualMediaRequest(
-                                        ActivityResultContracts.PickVisualMedia.ImageOnly
-                                )
+    if (showAdDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdDialog = false },
+            title = { Text("크레딧 부족") },
+            text = { Text("광고를 시청하고 크레딧을 얻으시겠습니까?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    ad.load(onLoaded = {
+                        ad.show(
+                            activity = (context as androidx.activity.ComponentActivity),
+                            onReward = { scope.launch { creditStore.addBonusOne() } }
                         )
-                    }
-            ) { Text("사진 선택") }
-            Spacer(Modifier.width(8.dp))
-            com.fitghost.app.ui.components.NeumorphicSegmentedControl(
-                    options = listOf("상의", "하의"),
-                    selectedIndex = if (part == "TOP") 0 else 1,
-                    onSelect = { part = if (it == 0) "TOP" else "BOTTOM" },
-                    modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+                    })
+                    showAdDialog = false
+                }) { Text("시청하기") }
+            },
+            dismissButton = { TextButton(onClick = { showAdDialog = false }) { Text("취소") } }
+        )
+    }
 
-        AnimatedVisibility(
-                visible = picked != null,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-        ) {
-            picked?.let {
-                NeumorphicCard {
-                    Image(
-                            painter = rememberAsyncImagePainter(it),
-                            contentDescription = "선택 이미지",
-                            modifier = Modifier.height(220.dp).fillMaxWidth()
-                    )
-                }
-            }
-        }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header
+        Text(
+            text = "가상 피팅",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(16.dp)
+        )
 
-        // 추천 아이템 프리뷰
-        AnimatedVisibility(
-                visible = itemUri != null,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-        ) {
-            itemUri?.let {
-                NeumorphicCard {
-                    Column(Modifier.padding(8.dp)) {
-                        Text("추천 아이템", style = MaterialTheme.typography.bodySmall)
-                        Image(
-                                painter = rememberAsyncImagePainter(it),
-                                contentDescription = "추천 아이템 이미지",
-                                modifier = Modifier.height(140.dp).fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        NeumorphicButton(
-                onClick = {
-                    val uri = picked ?: return@NeumorphicButton
-                    scope.launch {
-                        val input = context.contentResolver.openInputStream(uri) ?: return@launch
-                        val bmp = BitmapFactory.decodeStream(input)
-                        val garmentBmp =
-                                itemUri?.let { guri ->
-                                    context.contentResolver.openInputStream(guri)?.use { gi ->
-                                        BitmapFactory.decodeStream(gi)
-                                    }
+        Crossfade(targetState = isLoading || resultUri != null, label = "TryOnState") {
+            isResultState ->
+            if (isResultState) {
+                // Result/Loading View
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        NeumorphicCircularProgress(modifier = Modifier.size(64.dp))
+                    } else {
+                        resultUri?.let {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                                AsyncImage(model = it, contentDescription = "Result Image", modifier = Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
+                                Spacer(Modifier.height(16.dp))
+                                Text(message, style = MaterialTheme.typography.bodyLarge)
+                                Spacer(Modifier.height(16.dp))
+                                NeumorphicButton(onClick = { resultUri = null; modelUri = null; garmentUri = null }) {
+                                    Text("다시하기")
                                 }
-                        when (val r = repo.runTryOn(bmp, part, garmentBmp)) {
-                            is TryOnRepository.Result.Success -> {
-                                resultUri = r.uri
-                                message = "저장 성공"
-                            }
-                            is TryOnRepository.Result.NoCredit -> {
-                                message = "크레딧 부족: 광고 시청으로 +1"
-                                ad.load(
-                                        onLoaded = {
-                                            ad.show(
-                                                    activity =
-                                                            (context as
-                                                                    androidx.activity.ComponentActivity),
-                                                    onReward = { reward ->
-                                                        scope.launch { creditStore.addBonusOne() }
-                                                    }
-                                            )
-                                        }
-                                )
-                            }
-                            is TryOnRepository.Result.Error -> {
-                                message = "오류: ${r.throwable.message}"
+                                Spacer(Modifier.height(16.dp))
                             }
                         }
                     }
                 }
-        ) { Text("프리뷰 생성/저장") }
-        Spacer(Modifier.height(8.dp))
+            } else {
+                // Input View
+                Column(modifier = Modifier.padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ImagePickerBox(modifier = Modifier.weight(1f), title = "모델 사진", icon = Icons.Default.Person, uri = modelUri) { modelPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        ImagePickerBox(modifier = Modifier.weight(1f), title = "의상 사진", icon = Icons.Default.Checkroom, uri = garmentUri) { garmentPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    Text("피팅 부위", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    NeumorphicSegmentedControl(
+                        options = listOf("상의", "하의"),
+                        selectedIndex = if (part == "TOP") 0 else 1,
+                        onSelect = { part = if (it == 0) "TOP" else "BOTTOM" },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    NeumorphicButton(
+                        onClick = { runTryOn() },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        enabled = modelUri != null && garmentUri != null
+                    ) {
+                        Text("가상 피팅 시작", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        }
+    }
+}
 
-        AnimatedVisibility(
-                visible = resultUri != null || message.isNotEmpty(),
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-        ) {
-            NeumorphicCard {
-                Column(Modifier.padding(12.dp)) {
-                    resultUri?.let {
-                        Text("결과 저장됨: $it", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    if (message.isNotEmpty()) {
-                        Text(message, style = MaterialTheme.typography.bodyMedium)
-                    }
+@Composable
+private fun ImagePickerBox(modifier: Modifier = Modifier, title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, uri: Uri?, onClick: () -> Unit) {
+    NeumorphicCard(modifier = modifier.aspectRatio(1f).clickable(onClick = onClick)) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (uri != null) {
+                AsyncImage(model = uri, contentDescription = title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(imageVector = icon, contentDescription = title, modifier = Modifier.size(48.dp))
+                    Text(title, style = MaterialTheme.typography.titleSmall)
                 }
             }
         }

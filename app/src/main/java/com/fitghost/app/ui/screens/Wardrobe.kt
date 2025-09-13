@@ -1,128 +1,116 @@
 package com.fitghost.app.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.fitghost.app.data.model.Garment
-import com.fitghost.app.data.model.GarmentTaxonomy
 import com.fitghost.app.ui.theme.NeumorphicButton
 import com.fitghost.app.ui.theme.NeumorphicCard
-import com.fitghost.app.ui.theme.NeumorphicOutlinedTextField
+import com.fitghost.app.ui.theme.NeumorphicIconButton
 import com.fitghost.app.util.ServiceLocator
 import kotlinx.coroutines.launch
 
 @Composable
-fun WardrobeScreen() {
+fun WardrobeScreen(onNavigateAddGarment: () -> Unit) {
     val context = LocalContext.current
-    val db = remember { ServiceLocator.db(context) }
-    val dao = db.wardrobeDao()
+    val dao = remember { ServiceLocator.db(context).wardrobeDao() }
     val scope = rememberCoroutineScope()
-    var list by remember { mutableStateOf<List<Garment>>(emptyList()) }
+    var garments by remember { mutableStateOf<List<Garment>>(emptyList()) }
 
-    LaunchedEffect(Unit) { dao.all().collect { list = it } }
+    LaunchedEffect(Unit) {
+        dao.all().collect { garments = it }
+    }
 
-    var color by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("T") }
-    var subcategory by remember { mutableStateOf("") }
-
-    Column(Modifier.padding(16.dp)) {
-        NeumorphicCard {
-            Column(Modifier.padding(12.dp)) {
-                Row {
-                    NeumorphicOutlinedTextField(
-                            value = color,
-                            onValueChange = { color = it },
-                            label = { Text("색상") },
-                            modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    NeumorphicOutlinedTextField(
-                            value = type,
-                            onValueChange = { type = it },
-                            label = { Text("타입 T/B/O") },
-                            modifier = Modifier.weight(1f)
-                    )
-                }
-                NeumorphicOutlinedTextField(
-                        value = subcategory,
-                        onValueChange = { subcategory = it },
-                        label = { Text("세부종류(예: 반팔/긴팔/가디건/점퍼/바람막이...)") },
-                        modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                NeumorphicButton(
-                        onClick = {
-                            scope.launch {
-                                val sub = subcategory
-                                val subcat = GarmentTaxonomy.matchSubcategoryFreeText(sub)
-                                val resolvedType =
-                                        subcat?.let { GarmentTaxonomy.legacyTypeFor(it) } ?: type
-                                val tagSet =
-                                        (GarmentTaxonomy.suggestTags("$color $sub") +
-                                                        (subcat?.aliases ?: emptySet()).map {
-                                                            it.lowercase()
-                                                        } +
-                                                        listOfNotNull(
-                                                                sub
-                                                                        .takeIf { it.isNotBlank() }
-                                                                        ?.lowercase()
-                                                        ))
-                                                .toSet()
-                                dao.upsert(
-                                        Garment(
-                                                type = resolvedType,
-                                                color = color,
-                                                tags = tagSet.toList()
-                                        )
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                ) { Text("추가") }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        AnimatedVisibility(
-                visible = list.isEmpty(),
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            NeumorphicCard {
-                Column(Modifier.padding(16.dp)) {
-                    Text("옷장이 비어 있습니다", style = MaterialTheme.typography.titleMedium)
-                    Text("새로운 아이템을 추가해 보세요", style = MaterialTheme.typography.bodyMedium)
-                }
+            Text(
+                text = "내 옷장",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            NeumorphicIconButton(onClick = onNavigateAddGarment) {
+                Icon(Icons.Default.Add, contentDescription = "Add Garment")
             }
         }
 
-        LazyColumn {
-            items(list) { g ->
-                NeumorphicCard {
-                    ListItem(
-                            headlineContent = { Text("${g.type} - ${g.color}") },
-                            supportingContent = { Text("warmth ${g.warmth}") },
-                            trailingContent = {
-                                Row {
-                                    NeumorphicButton(onClick = { scope.launch { dao.delete(g) } }) {
-                                        Text("삭제")
-                                    }
+        if (garments.isEmpty()) {
+            // Empty State
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("옷장이 비어있어요.", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(16.dp))
+                    NeumorphicButton(onClick = onNavigateAddGarment) {
+                        Text("첫 의상 추가하기")
+                    }
+                }
+            }
+        } else {
+            // Grid View
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(garments) { garment ->
+                    NeumorphicCard(
+                        modifier = Modifier.clickable { /* Navigate to detail view */ }
+                    ) {
+                        Column {
+                            AsyncImage(
+                                model = garment.imageUri ?: "", // Placeholder or error image
+                                contentDescription = garment.description(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                            )
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(garment.description(), style = MaterialTheme.typography.titleSmall)
+                                Spacer(Modifier.height(8.dp))
+                                NeumorphicIconButton(
+                                    onClick = { scope.launch { dao.delete(garment) } },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete")
                                 }
                             }
-                    )
+                        }
+                    }
                 }
-                HorizontalDivider()
             }
         }
     }
+}
+
+private fun Garment.description(): String {
+    return "$color ${tags.firstOrNull() ?: type}"
 }
