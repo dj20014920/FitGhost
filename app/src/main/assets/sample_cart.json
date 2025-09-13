@@ -1,0 +1,5 @@
+[
+  {"id":1,"title":"화이트 셔츠 슬림핏","price":39900,"image":"https://picsum.photos/seed/shirt/300/200","mall":"무신사","link":"https://www.musinsa.com","status":"PENDING"},
+  {"id":2,"title":"블랙 진","price":49000,"image":"https://picsum.photos/seed/jeans/300/200","mall":"무신사","link":"https://www.musinsa.com","status":"PENDING"},
+  {"id":3,"title":"라이트 재킷","price":89000,"image":"https://picsum.photos/seed/jacket/300/200","mall":"네이버","link":"https://shopping.naver.com","status":"PENDING"}
+]

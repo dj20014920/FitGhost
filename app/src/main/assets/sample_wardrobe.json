@@ -1,0 +1,134 @@
+[
+  {
+    "id": 1,
+    "type": "T",
+    "color": "white",
+    "pattern": "solid",
+    "fabric": "cotton",
+    "warmth": 2,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_shirt_white/300/300",
+    "tags": ["basic", "work", "summer"]
+  },
+  {
+    "id": 2,
+    "type": "T",
+    "color": "black",
+    "pattern": "solid",
+    "fabric": "cotton",
+    "warmth": 1,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_t_black/300/300",
+    "tags": ["basic", "casual", "summer"]
+  },
+  {
+    "id": 3,
+    "type": "T",
+    "color": "blue",
+    "pattern": "striped",
+    "fabric": "cotton",
+    "warmth": 2,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_shirt_blue/300/300",
+    "tags": ["work", "basic"]
+  },
+  {
+    "id": 4,
+    "type": "T",
+    "color": "gray",
+    "pattern": "solid",
+    "fabric": "wool",
+    "warmth": 3,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_sweater_gray/300/300",
+    "tags": ["winter", "basic"]
+  },
+  {
+    "id": 5,
+    "type": "T",
+    "color": "heather gray",
+    "pattern": "solid",
+    "fabric": "fleece",
+    "warmth": 3,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_hoodie_gray/300/300",
+    "tags": ["casual", "street"]
+  },
+  {
+    "id": 6,
+    "type": "B",
+    "color": "black",
+    "pattern": "solid",
+    "fabric": "denim",
+    "warmth": 2,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_jeans_black/300/300",
+    "tags": ["basic", "casual"]
+  },
+  {
+    "id": 7,
+    "type": "B",
+    "color": "beige",
+    "pattern": "solid",
+    "fabric": "cotton",
+    "warmth": 2,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_chino_beige/300/300",
+    "tags": ["work", "basic"]
+  },
+  {
+    "id": 8,
+    "type": "B",
+    "color": "navy",
+    "pattern": "solid",
+    "fabric": "cotton",
+    "warmth": 1,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_shorts_navy/300/300",
+    "tags": ["summer", "casual"]
+  },
+  {
+    "id": 9,
+    "type": "B",
+    "color": "black",
+    "pattern": "solid",
+    "fabric": "polyester",
+    "warmth": 2,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_skirt_black/300/300",
+    "tags": ["work", "formal"]
+  },
+  {
+    "id": 10,
+    "type": "O",
+    "color": "navy",
+    "pattern": "solid",
+    "fabric": "nylon",
+    "warmth": 3,
+    "waterResist": true,
+    "imageUri": "https://picsum.photos/seed/wardrobe_jacket_navy/300/300",
+    "tags": ["rain", "windproof", "spring"]
+  },
+  {
+    "id": 11,
+    "type": "O",
+    "color": "gray",
+    "pattern": "herringbone",
+    "fabric": "wool",
+    "warmth": 5,
+    "waterResist": false,
+    "imageUri": "https://picsum.photos/seed/wardrobe_coat_gray/300/300",
+    "tags": ["winter", "formal"]
+  },
+  {
+    "id": 12,
+    "type": "O",
+    "color": "black",
+    "pattern": "quilted",
+    "fabric": "down",
+    "warmth": 5,
+    "waterResist": true,
+    "imageUri": "https://picsum.photos/seed/wardrobe_down_black/300/300",
+    "tags": ["winter", "rain", "windproof"]
+  }
+]

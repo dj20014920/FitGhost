@@ -1,0 +1,1 @@
+FitGhost: Kotlin + Jetpack Compose 기반 안드로이드 앱 MVP. 로컬 옷장/장바구니, 날씨 기반 코디 추천, 가상 Try-On 미리보기, 몰별 딥링크 결제를 제공. 서버리스 지향(데이터 로컬 저장), 광고/UMP 탑재.
