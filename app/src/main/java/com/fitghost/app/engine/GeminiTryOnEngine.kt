@@ -14,8 +14,8 @@ import com.fitghost.app.data.nanobanana.GeminiClient
  * - API 키 미설정 또는 호출 오류 시, 기존 FakeTryOnEngine으로 우회하여 안정성 확보(KISS/DRY).
  *
  * 주의
- * - API 키는 아직 적재하지 않음(요구사항). GeminiClient에서 예외 발생 시 우회 처리.
- * - // TODO: 설정 화면 또는 서버리스 토큰 릴레이가 준비되면 키를 주입하여 실제 호출 경로를 사용.
+ * - API 키는 ApiKeys 유틸리티를 통해 안전하게 저장/접근함.
+ * - GeminiClient에서 예외 발생 시 FakeTryOnEngine으로 우회 처리하여 안정성 확보.
  */
 class GeminiTryOnEngine : TryOnEngine {
 

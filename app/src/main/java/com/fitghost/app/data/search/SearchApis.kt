@@ -31,8 +31,7 @@ class SearchRepository(
         private val google: GoogleCSEApi? = null,
         private val naver: NaverShoppingApi? = null,
         /**
-         * Google Programmable Search의 CX(Search Engine ID) // TODO: 실제 CX 값 주입 예정(설정/빌드변수/서버리스 토큰
-         * 등)
+         * Google Programmable Search의 CX(Search Engine ID) // TODO: 실제 CX 값 주입 예정(설정/빌드변수/서버리스 토큰 등)
          */
         private val googleCx: String? = null
 ) {
@@ -49,16 +48,16 @@ class SearchRepository(
 
         // 1) Google
         val googleKey = ApiKeys.provider.googleSearchApiKey(context)
-        if (google != null && !googleKey.isNullOrBlank() && !googleCx.isNullOrBlank()) {
-            val gApi = google!!
-            val key = googleKey!!
-            val cx = googleCx!!
+        val cx = ApiKeys.provider.googleCseCx(context) ?: googleCx
+        if (google != null && !googleKey.isNullOrBlank() && !cx.isNullOrBlank()) {
+            val gApi = google
+            val key = googleKey
             val byGoogle =
                     runCatching {
                         callGoogleSearch(
                                 api = gApi,
-                                apiKey = key,
-                                cx = cx,
+                                apiKey = key!!,
+                                cx = cx!!,
                                 query = trimmed,
                                 limit = limit
                         )

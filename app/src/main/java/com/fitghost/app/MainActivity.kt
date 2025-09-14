@@ -18,14 +18,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             NeumorphicTheme {
-                AppContent()
+                AppContent(activity = this)
             }
         }
     }
 }
 
 @Composable
-fun AppContent() {
+fun AppContent(activity: ComponentActivity) {
     val navController = rememberNavController()
 
     Scaffold(

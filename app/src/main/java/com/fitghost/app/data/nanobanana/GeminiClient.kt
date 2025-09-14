@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
-import com.fitghost.app.util.ApiKeys
+
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -23,16 +23,16 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
- * Gemini(나노바나나) 이미지 생성/편집 클라이언트 스켈레톤.
+ * Gemini(나노바나나) 이미지 생성/편집 클라이언트.
  *
  * 목표
- * - 서버리스 구성(키 저장은 아직 X): API 키는 호출 시점에 외부에서 주입되도록 설계
+ * - 서버리스 구성: API 키는 ApiKeys 유틸리티를 통해 안전하게 저장/접근
  * - DRY: 요청/응답 모델을 단일화하여 모든 호출 경로에서 재사용
  * - KISS/YAGNI: 최소한의 러닝 파트로 MVP 완성, 추후 확장(옵션 필드/엔드포인트)은 용이하게
  *
  * 주의
- * - 실제 엔드포인트/필드는 공식 문서 기준으로 업데이트 필요(여기선 REST v1beta 스키마 스켈레톤)
- * - // TODO: API 키 적재 예정(현재 null → 호출부에서 안내/가드)
+ * - 실제 엔드포인트/필드는 공식 문서 기준으로 업데이트 필요(여기선 REST v1beta 스키마 사용)
+ * - API 키는 ApiKeys.KEY_GEMINI에서 조회하며, 없을 경우 예외 발생
  *
  * 권장 사용 패턴
  * val client = GeminiClient(context)
@@ -78,6 +78,21 @@ class GeminiClient(
     private val api: GeminiApi = retrofit.create(GeminiApi::class.java)
 
     // region Public APIs
+
+    /**
+     * ApiKeys 유틸리티에서 Gemini API 키를 가져옵니다.
+     * 키가 없으면 IllegalStateException을 발생시킵니다.
+     * 
+     * @return Gemini API 키
+     * @throws IllegalStateException API 키가 설정되지 않은 경우
+     */
+    private fun requireGeminiApiKey(): String {
+        val key = com.fitghost.app.util.ApiKeys.provider.geminiApiKey(context)
+        if (key.isNullOrBlank()) {
+            throw IllegalStateException("Gemini API 키가 설정되지 않았습니다. 설정 화면에서 API 키를 등록해 주세요.")
+        }
+        return key
+    }
 
     /**
      * 텍스트 → 이미지 생성.
@@ -154,21 +169,7 @@ class GeminiClient(
 
     // endregion
 
-    // region Key Handling
-
-    private fun requireGeminiApiKey(): String {
-        val key = ApiKeys.provider.geminiApiKey(context)
-        if (key.isNullOrBlank()) {
-            // TODO: API 키 적재 예정
-            // - 설정 화면에서 사용자 입력 후 안전 저장(권장)
-            // - 또는 서버리스 프록시(에페메럴 토큰)로 교체
-            throw IllegalStateException("Gemini API 키가 설정되지 않았습니다. 설정 화면에서 API 키를 등록해 주세요.")
-        }
-        return key
-    }
-
-    // endregion
-
+    
     // region Helpers
 
     private fun ByteArray.encodeBase64(): String =

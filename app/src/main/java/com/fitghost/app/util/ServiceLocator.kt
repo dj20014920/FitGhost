@@ -5,6 +5,8 @@ import androidx.room.Room
 import com.fitghost.app.data.db.AppDb
 import com.fitghost.app.data.weather.OpenMeteoApi
 import com.fitghost.app.data.weather.WeatherRepo
+import com.fitghost.app.domain.ContextEngine
+import com.fitghost.app.domain.OutfitEngine
 import com.fitghost.app.domain.OutfitRecommender
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -58,16 +60,19 @@ object ServiceLocator {
     fun searchRepo(context: Context): SearchRepository {
         val googleApi = googleRetrofit().create(GoogleCSEApi::class.java)
         val naverApi = naverRetrofit().create(NaverShoppingApi::class.java)
-        val googleCx: String? = null // TODO: CX 주입 예정
+        // CX/Key는 ApiKeys.provider를 통해 주입(현재는 null → 빈 결과 폴백)
         return SearchRepository(
             context = context,
             google = googleApi,
-            naver = naverApi,
-            googleCx = googleCx
+            naver = naverApi
         )
     }
 
     fun weatherRepo(): WeatherRepo = WeatherRepo(retrofit().create(OpenMeteoApi::class.java))
 
-    val recommender: OutfitRecommender by lazy { OutfitRecommender() }
+    val contextEngine: ContextEngine by lazy { ContextEngine() }
+    
+    val outfitEngine: OutfitEngine by lazy { OutfitEngine() }
+    
+    val recommender: OutfitRecommender by lazy { OutfitRecommender(contextEngine) }
 }

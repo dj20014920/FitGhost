@@ -56,6 +56,12 @@ interface ApiKeyProvider {
     fun googleSearchApiKey(context: Context): String?
 
     /**
+     * Google Programmable Search(또는 CSE) 엔진 ID(CX)
+     * // TODO: 설정/빌드변수/서버리스 토큰으로 주입 예정
+     */
+    fun googleCseCx(context: Context): String?
+
+    /**
      * 네이버 쇼핑/검색용 키: Client ID + Client Secret 세트
      * // TODO: API 키 적재 예정
      */
@@ -99,6 +105,11 @@ object DefaultApiKeyProvider : ApiKeyProvider {
 
     override fun googleSearchApiKey(context: Context): String? {
         // TODO: API 키 적재 예정
+        return null
+    }
+
+    override fun googleCseCx(context: Context): String? {
+        // TODO: CX 주입 예정
         return null
     }
 

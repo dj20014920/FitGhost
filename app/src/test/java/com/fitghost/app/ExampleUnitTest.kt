@@ -1,4 +1,4 @@
-package com.example.ghostfit
+package com.fitghost.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

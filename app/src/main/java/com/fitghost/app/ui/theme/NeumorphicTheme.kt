@@ -14,50 +14,51 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.isSystemInDarkTheme
 
-// Neumorphic color scheme
-private val NeumorphicLightColorScheme = lightColorScheme(
-    primary = Color(0xFF0A84FF), // iOS Blue
+// Liquid Glass + Neumorphism Color Schemes
+val LiquidGlassLightColorScheme = lightColorScheme(
+    primary = Color(0xFF1A1A1A), // Pure black for contrast
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD6E9FF),
-    onPrimaryContainer = Color(0xFF00224D),
-    secondary = Color(0xFF8E8E93), // iOS Gray
+    primaryContainer = Color(0xFF1A1A1A).copy(alpha = 0.08f),
+    onPrimaryContainer = Color(0xFF1A1A1A),
+    secondary = Color(0xFF6B6B6B),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEAEAEC),
-    onSecondaryContainer = Color(0xFF1C1C1E),
-    tertiary = Color(0xFF34C759), // iOS Green
-    onTertiary = Color.Black,
-    background = Color(0xFFEFEFF4), // iOS grouped bg
-    onBackground = Color(0xFF1C1C1E),
-    surface = Color(0xFFEFEFF4),
-    onSurface = Color(0xFF1C1C1E),
-    surfaceVariant = Color(0xFFF7F7F9),
-    onSurfaceVariant = Color(0xFF3A3A3C),
-    outline = Color(0xFFAEAEB2),
+    secondaryContainer = Color(0xFF6B6B6B).copy(alpha = 0.12f),
+    onSecondaryContainer = Color(0xFF1A1A1A),
+    tertiary = Color(0xFF007AFF), // iOS blue accent
+    onTertiary = Color.White,
+    background = Color(0xFFF8F9FA), // Slightly warm white
+    onBackground = Color(0xFF1A1A1A),
+    surface = Color(0xFFFFFFFF), // Pure white surface
+    onSurface = Color(0xFF1A1A1A),
+    surfaceVariant = Color(0xFFF0F0F3),
+    onSurfaceVariant = Color(0xFF3C3C43),
+    outline = Color(0xFFE5E5EA),
     error = Color(0xFFFF3B30),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE5E3),
-    onErrorContainer = Color(0xFF410E0B),
+    errorContainer = Color(0xFFFF3B30).copy(alpha = 0.1f),
+    onErrorContainer = Color(0xFFFF3B30),
 )
 
-private val NeumorphicDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF0A84FF),
+val LiquidGlassDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF00BFFF), // DeepSkyBlue as a vibrant accent
     onPrimary = Color.Black,
-    primaryContainer = Color(0xFF0A84FF).copy(alpha = 0.2f),
-    onPrimaryContainer = Color(0xFFD6E9FF),
-    secondary = Color(0xFF98989F),
-    onSecondary = Color.Black,
-    secondaryContainer = Color(0xFF2C2C2E),
-    onSecondaryContainer = Color(0xFFEAEAEC),
-    tertiary = Color(0xFF30D158),
+    primaryContainer = Color(0xFF00BFFF).copy(alpha = 0.2f),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFF4E4E4E),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF333333),
+    onSecondaryContainer = Color(0xFFEAEAEA),
+    tertiary = Color(0xFF00BFFF),
     onTertiary = Color.Black,
-    background = Color(0xFF0D0D0D),
+    background = Color(0xFF1A1A1A), // Very dark gray, almost black
     onBackground = Color(0xFFEAEAEA),
-    surface = Color(0xFF0D0D0D),
+    surface = Color(0xFF202020), // Slightly lighter gray for components
     onSurface = Color(0xFFEAEAEA),
-    surfaceVariant = Color(0xFF1C1C1E),
+    surfaceVariant = Color(0xFF2C2C2E),
     onSurfaceVariant = Color(0xFFC7C7CC),
-    outline = Color(0xFF2C2C2E),
+    outline = Color(0xFF404040),
     error = Color(0xFFFF453A),
     onError = Color.Black,
     errorContainer = Color(0xFF3A1917),
@@ -160,10 +161,18 @@ private val NeumorphicShapes = Shapes(
 )
 
 @Composable
-fun NeumorphicTheme(content: @Composable () -> Unit) {
-    val isDark = isSystemInDarkTheme()
+fun NeumorphicTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    val colorScheme = if (darkTheme) {
+        LiquidGlassDarkColorScheme
+    } else {
+        LiquidGlassLightColorScheme
+    }
+
     MaterialTheme(
-        colorScheme = if (isDark) NeumorphicDarkColorScheme else NeumorphicLightColorScheme,
+        colorScheme = colorScheme,
         typography = NeumorphicTypography,
         shapes = NeumorphicShapes,
         content = content

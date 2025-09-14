@@ -36,10 +36,17 @@ Kotlin + Jetpack Compose 기반의 서버리스 패션 코디/가상피팅 앱 M
     - model/ (Garment, CartItem, WeatherSnapshot)
     - weather/ (OpenMeteoApi, WeatherRepo)
     - CreditStore, LocalImageStore, TryOnRepository
-  - domain/ (OutfitRecommender)
-  - engine/ (TryOnEngine, FakeTryOnEngine — 엔진 교체 지점)
+  - domain/ (OutfitRecommender, ContextEngine)
+  - engine/ (TryOnEngine, FakeTryOnEngine — 엔진 교체 지점, GeminiTryOnEngine 준비)
   - ui/ (Home, TryOn, Wardrobe, Shop, Cart, Gallery, components)
-  - util/ (Browser, ServiceLocator)
+  - util/ (Browser, ServiceLocator, ApiKeyProvider)
+
+아키텍처/DI
+- 간단 MVVM(+Repository) 구조. ServiceLocator로 Room/Retrofit/도메인 싱글톤 주입
+- 교체 포인트: `TryOnEngine` 구현만 교체하면 `TryOnRepository` 생성자 주입으로 전환 가능
+- 날씨 API 베이스 URL/인터페이스는 `data/weather`에서 관리
+- 검색: `SearchRepository`는 ApiKeyProvider로 Google 키/CX, Naver 키를 주입(미설정 시 더미 폴백)
+
 
 아키텍처/DI
 - 간단 MVVM(+Repository) 구조. ServiceLocator로 Room/Retrofit/도메인 싱글톤 주입
