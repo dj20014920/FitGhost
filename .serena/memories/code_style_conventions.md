@@ -1,1 +1,0 @@
-Kotlin 공식 코드 스타일. 패키지: ads, data(db, model, weather), domain, engine, ui(screens), util. KDoc 주요 클래스, 파일 헤더. DRY/KISS/YAGNI/SOLID 준수. TryOnEngine 인터페이스로 교체 가능 설계. Repository + (후속 ViewModel/Hilt 권장).

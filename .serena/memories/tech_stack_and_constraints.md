@@ -1,1 +1,0 @@
-Kotlin + Jetpack Compose(MVVM), minSdk 26, target 34. compose-bom, material3, activity-compose, lifecycle, coil. datastore-preferences, room, retrofit(okhttp), play-services-ads, androidx.window, customtabs, UMP. 서버리스/로컬 저장 우선, 키/PII 금지.

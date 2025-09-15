@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#2A2A2A</color>
-    <color name="purple_200">#BB86FC</color>
-    <color name="purple_700">#7B1FA2</color>
-    <color name="black">#000000</color>
+    <!-- Primary colors -->
+    <color name="purple_500">#6200EE</color>
+    <color name="purple_700">#3700B3</color>
     <color name="teal_200">#03DAC5</color>
+    <color name="teal_700">#018786</color>
+
+    <!-- Basic colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- FitGhost Soft Clay colors -->
+    <color name="fitghost_bg_primary">#F0F2F5</color>
+    <color name="fitghost_bg_secondary">#FFFFFF</color>
+    <color name="fitghost_bg_tertiary">#E4E6EB</color>
+    <color name="fitghost_text_primary">#1C1E21</color>
+    <color name="fitghost_text_secondary">#65676B</color>
+    <color name="fitghost_accent_primary">#1877F2</color>
 </resources>
