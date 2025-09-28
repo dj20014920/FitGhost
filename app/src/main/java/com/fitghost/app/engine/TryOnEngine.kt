@@ -17,6 +17,16 @@ interface TryOnEngine {
     suspend fun renderPreview(
         context: Context,
         modelUri: Uri,
-        clothingUri: Uri
+        clothingUris: List<Uri>,
+        systemPrompt: String? = null
     ): Bitmap
+
+    /**
+     * 단일 의상 이미지 편의 함수(기존 시그니처 호환)
+     */
+    suspend fun renderPreview(
+        context: Context,
+        modelUri: Uri,
+        clothingUri: Uri
+    ): Bitmap = renderPreview(context, modelUri, listOf(clothingUri), null)
 }

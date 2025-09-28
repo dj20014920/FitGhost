@@ -12,7 +12,7 @@ import java.util.Calendar
  * 주 10회 무료 + 리워드 광고 시 +1
  * DataStore(keys: week, used, bonus)
  */
-class CreditStore(private val context: Context) {
+class CreditStore(private val context: Context) { // BuildConfig.UNLIMITED_CREDITS respected
     companion object {
         private val Context.dataStore by preferencesDataStore(name = "credit_store")
         private val KEY_WEEK = intPreferencesKey("week")
@@ -27,14 +27,17 @@ class CreditStore(private val context: Context) {
     }
 
     val creditFlow: Flow<Int> = context.dataStore.data.map { prefs ->
-        val week = prefs[KEY_WEEK] ?: 0
-        val used = prefs[KEY_USED] ?: 0
-        val bonus = prefs[KEY_BONUS] ?: 0
-        val base = if (week == currentWeek()) WEEKLY_FREE else WEEKLY_FREE
-        base + bonus - if (week == currentWeek()) used else 0
+        if (com.fitghost.app.BuildConfig.UNLIMITED_CREDITS) Int.MAX_VALUE else {
+            val week = prefs[KEY_WEEK] ?: 0
+            val used = prefs[KEY_USED] ?: 0
+            val bonus = prefs[KEY_BONUS] ?: 0
+            val base = if (week == currentWeek()) WEEKLY_FREE else WEEKLY_FREE
+            base + bonus - if (week == currentWeek()) used else 0
+        }
     }
 
     suspend fun consumeOne(): Boolean {
+        if (com.fitghost.app.BuildConfig.UNLIMITED_CREDITS) return true
         var success = false
         context.dataStore.edit { prefs ->
             val week = prefs[KEY_WEEK] ?: currentWeek()
@@ -54,6 +57,7 @@ class CreditStore(private val context: Context) {
     }
 
     suspend fun addBonusOne() {
+        if (com.fitghost.app.BuildConfig.UNLIMITED_CREDITS) return
         context.dataStore.edit { prefs ->
             val week = prefs[KEY_WEEK] ?: currentWeek()
             val bonus = prefs[KEY_BONUS] ?: 0
