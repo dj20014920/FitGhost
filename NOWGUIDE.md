@@ -1,5 +1,74 @@
 # FitGhost - 가상 피팅 앱 📱✨
 
+## 🔁 NOWGUIDE 최신 동기화 (2025-09-29)
+
+### 1) Gemini Try-On REST 스키마 전면 수정(중요)
+- 요청 JSON을 공식 스키마로 교정했습니다.
+  - parts 이미지 필드: snake_case 사용 → `inline_data.mime_type`, `inline_data.data`
+  - `contents[].role`는 `user`만 허용(공식 사양). `system`은 사용 금지
+  - `generationConfig.responseMimeType`에 `image/png` 지정 금지(허용 목록 아님)
+- 전송 파트 순서(명확성↑): `텍스트 → 모델 이미지(1장) → 의상 이미지들(2..N)`
+- 시스템 품질 가이드는 `system_instruction` 대신 유저 텍스트 앞부분에 결합해 단일 텍스트로 전송(역할 오류 예방)
+
+관련 클래스
+- `NanoBananaTryOnEngine` 요청/파서 보강
+- `CloudTryOnEngine` 요청/파서 보강
+
+### 2) 프롬프트 템플릿 통일(입력 없을 때 기본 사용)
+- 유틸 추가: `TryOnPromptBuilder`
+  - 시스템 가이드(얼굴/손/헤어 보존, 왜곡/아티팩트 방지, 스튜디오 퀄리티 등)
+  - 유저 텍스트(공식 템플릿 기반)
+    - 1벌: `Take the person from image 1 and place the clothing item from image 2...`
+    - 2벌 이상: `...place the clothing items from images 2 to N...`
+    - (모델 미등록 방어 문구도 준비)
+
+### 3) 응답 파서 호환성 강화
+- 표준 응답: `candidates[0].content.parts[*].inline_data.data` 우선
+- 일부 변형 응답(camelCase): `inlineData.data`도 백워드 호환으로 수용
+
+### 4) 첨부 이미지 수량 상한(앱/엔진 동시 적용)
+- 빌드 설정 추가: `MAX_TRYON_TOTAL_IMAGES`(기본 4)
+  - 총 첨부 허용 장수 = 모델 1 + 의상 (기본 3)
+  - `local.properties`로 변경 가능: `MAX_TRYON_TOTAL_IMAGES=5`
+- UI 제어: 의상 추가 버튼에서 상한 초과 시 스낵바 안내 후 차단
+- 엔진 제어: 초과 이미지는 안전하게 잘라 전송(로그 경고 출력)
+
+### 5) 로그로 정상 동작 확인
+- 기대 흐름
+  - `Preparing Gemini request parts: model=1, clothes=N, text=1`
+  - `Calling Google Gemini API ...`
+  - `Gemini API response received, parsing image...`
+  - `Successfully extracted image (inline_data|inlineData)`
+  - `Saved preview to: .../tryon_YYYYMMDD_HHMMSS.png`
+
+### 6) 자주 발생했던 오류와 해결(요약)
+- Invalid JSON(Unknown name `inlineData`/`mimeType`): → snake_case(`inline_data`/`mime_type`)로 전환
+- `response_mime_type` 허용 안 됨: → 제거(이미지 응답은 parts.inline_data로 수신)
+- `Please use a valid role: user, model.`: → contents에 `role=system` 금지(시스템 지시는 텍스트 결합으로 전달)
+- 401/403: API Key 누락/오류 → `NANOBANANA_API_KEY`/`GEMINI_VERTEX_API_KEY` 설정 확인
+
+### 7) 구성 방법(요약)
+- `local.properties`
+  ```properties
+  # Gemini/NanoBanana 키
+  GEMINI_VERTEX_API_KEY=AIza...your_key...
+  NANOBANANA_API_KEY=AIza...or_same_key...
+
+  # 클라우드 경로 옵트인(기본 false)
+  CLOUD_TRYON_ENABLED=false
+
+  # 첨부 이미지 총 상한(모델 1 + 의상 N)
+  MAX_TRYON_TOTAL_IMAGES=4
+  ```
+
+### 8) 테스트 시나리오 가이드
+- 모델 1 + 의상 1/2/3장 각각 시도 → 결과/로그 확인
+- 의상 4장 이상 선택 시: 기본 상한으로 차단(또는 설정 상향 후 재테스트)
+- 결과 품질 약함 → 시스템 가이드에 조명/그림자/핏/소재질감 지시를 구체화(영문 추천)
+- 현재 UI는 모델 사진 필수(버튼 활성 조건). 의상만 모드는 필요 시 별도 플래그로 활성화 예정.
+
+---
+
 ## 🔁 NOWGUIDE 최신 동기화 (2025-09-26)
 
 ### 1) NanoBanana TLS 이슈 현황/원인
