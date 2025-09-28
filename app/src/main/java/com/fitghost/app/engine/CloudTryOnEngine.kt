@@ -35,29 +35,21 @@ class CloudTryOnEngine(
 
         // 1) 입력 이미지 로드 → PNG로 인코딩 → base64
         val modelB64 = Base64.encodeToString(ImageUtils.uriToPngBytes(context, modelUri), Base64.NO_WRAP)
-        val clothingB64s = clothingUris.mapNotNull {
+        val maxTotal = com.fitghost.app.BuildConfig.MAX_TRYON_TOTAL_IMAGES.coerceAtLeast(2)
+        val maxClothes = (maxTotal - 1).coerceAtLeast(1)
+        val clothingB64s = clothingUris.take(maxClothes).mapNotNull {
             runCatching { Base64.encodeToString(ImageUtils.uriToPngBytes(context, it), Base64.NO_WRAP) }.getOrNull()
         }
 
         // 2) 시스템 프롬프트(고정 제약 + 사용자 프롬프트를 system으로 합침)
-        val baseSystem = """
-            You are a professional virtual try-on engine. Combine the provided clothing images onto the person in the model image.
-            Requirements:
-            - Preserve the person's identity, face, hands, and background.
-            - Match perspective, scale, pose, and lighting realistically.
-            - Avoid warping or artifacts. Keep hair and fingers natural.
-            - Output a photorealistic studio-quality image at 1024x1024.
-        """.trimIndent()
-        val finalSystem = buildString {
-            append(baseSystem)
-            systemPrompt?.takeIf { it.isNotBlank() }?.let {
-                append('\n'); append("Additional instructions: "); append(it.trim())
-            }
-        }
+        val finalSystem = TryOnPromptBuilder.buildSystemText(systemPrompt)
 
         // 3) REST 요청 페이로드 구성 (Generative Language API)
         val userParts = JSONArray().apply {
-            // 모델 이미지 먼저
+            // 텍스트 먼저(시스템 가이드를 결합하여 단일 텍스트로 전달)
+            val combinedText = (finalSystem + "\n\n" + TryOnPromptBuilder.buildUserInstruction(hasModel = true, clothingCount = clothingB64s.size)).trim()
+            put(JSONObject().put("text", combinedText))
+            // 모델 이미지
             put(
                 JSONObject().put(
                     "inline_data",
@@ -77,18 +69,12 @@ class CloudTryOnEngine(
                     )
                 )
             }
-            // 합성 모드 지시 텍스트(간단)
-            put(JSONObject().put("text", "Combine the clothing onto the person in the model image."))
         }
 
         val userContent = JSONObject().put("role", "user").put("parts", userParts)
 
-        val systemContent = JSONObject().put("role", "system").put(
-            "parts", JSONArray().put(JSONObject().put("text", finalSystem))
-        )
-
         val body = JSONObject()
-            .put("contents", JSONArray().put(systemContent).put(userContent))
+            .put("contents", JSONArray().put(userContent))
             .put("generationConfig", JSONObject()
                 .put("temperature", 0.25)
                 .put("candidateCount", 1)

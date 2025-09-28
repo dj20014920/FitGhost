@@ -74,6 +74,13 @@ android {
                         .toString()
         buildConfigField("boolean", "CLOUD_TRYON_ENABLED", cloudTryOnEnabled)
 
+        // Max total images for try-on (model + clothes). Can be overridden in local.properties
+        val maxTryOnTotalImages =
+            (localProperties.getProperty("MAX_TRYON_TOTAL_IMAGES")
+                ?: (project.findProperty("MAX_TRYON_TOTAL_IMAGES") as String?)
+                ?: System.getenv("MAX_TRYON_TOTAL_IMAGES") ?: "4")
+        buildConfigField("int", "MAX_TRYON_TOTAL_IMAGES", maxTryOnTotalImages)
+
         // Debug-only emergency: allow insecure TLS for NanoBanana (hostname mismatch)
         // Default false. Enable ONLY for local debug if server cert is misconfigured.
         val allowInsecureTls = (localProperties.getProperty("ALLOW_INSECURE_TLS")

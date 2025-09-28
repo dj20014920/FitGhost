@@ -63,17 +63,22 @@ class NanoBananaTryOnEngine(
         try {
             // 이미지들을 PNG 바이트로 변환
             val modelPng = ImageUtils.uriToPngBytes(context, modelUri)
-            val clothingPngs = clothingUris.mapNotNull { uri ->
+            val maxTotal = BuildConfig.MAX_TRYON_TOTAL_IMAGES.coerceAtLeast(2)
+            val maxClothes = (maxTotal - 1).coerceAtLeast(1)
+            val clothingPngs = clothingUris.take(maxClothes).mapNotNull { uri ->
                 runCatching { ImageUtils.uriToPngBytes(context, uri) }.getOrElse {
                     Log.w(TAG, "Failed to read clothing image: $uri", it)
                     null
                 }
             }
 
-            // Gemini API 요청 본문 생성 (공식 문서 형식 따라)
+            // Gemini API 요청 본문 생성 (공식 문서 형식 + 통일 템플릿)
             val requestBody = buildGeminiVirtualTryOnRequest(modelPng, clothingPngs, systemPrompt)
 
-            Log.d(TAG, "Calling Google Gemini API for virtual try-on (model: gemini-2.5-flash-image-preview, clothes=${clothingPngs.size})")
+            Log.d(TAG, "Calling Google Gemini API for virtual try-on (model: gemini-2.5-flash-image-preview, modelImages=1, clothes=${clothingPngs.size})")
+            if (clothingUris.size > clothingPngs.size) {
+                Log.w(TAG, "Clothing images truncated to max $maxClothes by configuration")
+            }
 
             val request = Request.Builder()
                 .url(apiUrl)
@@ -111,10 +116,28 @@ class NanoBananaTryOnEngine(
         clothingPngs: List<ByteArray>,
         systemPrompt: String?
     ): okhttp3.RequestBody {
-        // Google Generative Language API 표준 스키마
-        // contents: [ { role: "user", parts: [ {inline_data:{mime_type,data}}, ..., {text:"..."} ] } ]
-        val parts = JSONArray().apply {
-            // 의상 이미지들
+        // 1) 유저 컨텐츠만 사용 (공식 스키마 준수: role=user)
+        //    시스템 지시문은 유저 텍스트 앞부분에 결합하여 한 덩어리 텍스트로 전달
+        val combinedText = buildString {
+            append(TryOnPromptBuilder.buildSystemText(systemPrompt))
+            append("\n\n")
+            append(TryOnPromptBuilder.buildUserInstruction(hasModel = true, clothingCount = clothingPngs.size))
+        }.trim()
+
+        // 2) 유저 컨텐츠: 텍스트 → 모델 이미지 → 의상들
+        val userParts = JSONArray().apply {
+            // 텍스트 먼저(명확한 지시 제공)
+            put(JSONObject().put("text", combinedText))
+            // 모델(이미지1)
+            put(
+                JSONObject().put(
+                    "inline_data",
+                    JSONObject()
+                        .put("mime_type", "image/png")
+                        .put("data", Base64.encodeToString(modelPng, Base64.NO_WRAP))
+                )
+            )
+            // 의상 이미지들(이미지2..N)
             clothingPngs.forEach { clothingPng ->
                 put(
                     JSONObject().put(
@@ -125,24 +148,11 @@ class NanoBananaTryOnEngine(
                     )
                 )
             }
-            // 모델 이미지
-            put(
-                JSONObject().put(
-                    "inline_data",
-                    JSONObject()
-                        .put("mime_type", "image/png")
-                        .put("data", Base64.encodeToString(modelPng, Base64.NO_WRAP))
-                )
-            )
-            // 프롬프트 텍스트
-            val prompt = buildVirtualTryOnPrompt(systemPrompt, clothingPngs.size)
-            put(JSONObject().put("text", prompt))
         }
 
-        val userContent = JSONObject()
-            .put("role", "user")
-            .put("parts", parts)
+        val userContent = JSONObject().put("role", "user").put("parts", userParts)
 
+        // 3) 최종 요청 바디
         val requestJson = JSONObject()
             .put("contents", JSONArray().put(userContent))
             .put(
@@ -151,7 +161,8 @@ class NanoBananaTryOnEngine(
                     .put("temperature", 0.25)
                     .put("candidateCount", 1)
             )
-        
+
+        Log.d(TAG, "Preparing Gemini request parts: model=1, clothes=${clothingPngs.size}, text=1")
         return requestJson.toString().toRequestBody("application/json".toMediaType())
     }
 
@@ -160,15 +171,8 @@ class NanoBananaTryOnEngine(
      * 전문적인 이커머스 패션 사진 스타일로 요청
      */
     private fun buildVirtualTryOnPrompt(systemPrompt: String?, clothingCount: Int): String {
-        if (!systemPrompt.isNullOrBlank()) {
-            return systemPrompt
-        }
-
-        return when (clothingCount) {
-            1 -> "Create a professional e-commerce fashion photo. Take the clothing item from the first image and let the person from the second image wear it. Generate a realistic, full-body shot of the person wearing the clothing, with proper lighting and shadows adjusted to match a studio environment. The result should look natural and professional for online shopping."
-            
-            else -> "Create a professional e-commerce fashion photo. Take the clothing items from the first ${clothingCount} images and create a complete outfit for the person from the last image. Generate a realistic, full-body shot of the person wearing all the clothing items as a coordinated outfit, with proper lighting and shadows adjusted to match a studio environment. The result should look natural and professional for online shopping."
-        }
+        // 유지(호환 목적). 현재는 TryOnPromptBuilder에서 유저 텍스트를 생성하므로 사용하지 않음.
+        return TryOnPromptBuilder.buildUserInstruction(hasModel = true, clothingCount = clothingCount)
     }
 
     /**

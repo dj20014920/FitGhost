@@ -43,6 +43,7 @@ import com.fitghost.app.ui.theme.FitGhostColors
 import kotlinx.coroutines.launch
 
 import com.fitghost.app.engine.CompositeTryOnEngine
+import com.fitghost.app.BuildConfig
 
 /** 가상 피팅 화면 PRD: Try-On 프리뷰 생성/저장/갤러리 표출 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -180,11 +181,21 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                 ClothingSelectionSection(
                         clothingUris = clothingUris,
                         onAddClothing = {
-                            pickClothingLauncher.launch(
-                                    PickVisualMediaRequest(
-                                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                            val totalMax = BuildConfig.MAX_TRYON_TOTAL_IMAGES.coerceAtLeast(2)
+                            val allowedClothes = (totalMax - 1).coerceAtLeast(1)
+                            if (clothingUris.size >= allowedClothes) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "의상 이미지는 최대 ${'$'}allowedClothes장까지 선택할 수 있습니다."
                                     )
-                            )
+                                }
+                            } else {
+                                pickClothingLauncher.launch(
+                                    PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }
                         },
                         onRemoveClothing = { index ->
                             clothingUris = clothingUris.filterIndexed { i, _ -> i != index }
