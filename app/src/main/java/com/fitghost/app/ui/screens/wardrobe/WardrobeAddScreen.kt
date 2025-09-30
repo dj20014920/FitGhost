@@ -3,8 +3,6 @@ package com.fitghost.app.ui.screens.wardrobe
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,32 +15,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
 import com.fitghost.app.ui.theme.FitGhostColors
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import java.io.File
-import java.io.FileOutputStream
-import kotlin.math.max
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-// 이미지 프리뷰 동적 크기 및 저장 축소 관련 상수
-private val MaxPreviewHeightDp = 360.dp // 프리뷰 최대 높이 한도
-private const val MAX_SAVE_DIMENSION_PX = 1280 // 저장 시 축소할 최대 한변 픽셀 (긴 변 기준)
-private const val SAVE_JPEG_QUALITY = 85 // 저장 JPEG 품질
+/**
+ * 이미지 설정 상수
+ *
+ * 옷장 이미지 처리를 위한 설정값들
+ */
+private object ImageConfig {
+    val MAX_PREVIEW_HEIGHT_DP = 360.dp // 프리뷰 최대 높이
+    const val MAX_SAVE_DIMENSION = 1280 // 저장 시 최대 해상도 (긴 변 기준)
+    const val JPEG_QUALITY = 85 // JPEG 압축 품질 (85-90 권장)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,33 +100,39 @@ fun WardrobeAddScreen(
 
         scope.launch {
             withContext(Dispatchers.IO) {
-                val finalImageUri = imageUri?.let { uriStr ->
-                    val sourceUri = Uri.parse(uriStr)
-                    // 이미지를 축소하여 저장
-                    resizeAndPersist(context, sourceUri, MAX_SAVE_DIMENSION_PX, SAVE_JPEG_QUALITY)?.toString()
-                }
+                val finalImageUri =
+                        imageUri?.let { uriStr ->
+                            val sourceUri = Uri.parse(uriStr)
+                            // 이미지를 축소하여 저장
+                            resizeAndPersist(
+                                            context,
+                                            sourceUri,
+                                            ImageConfig.MAX_SAVE_DIMENSION,
+                                            ImageConfig.JPEG_QUALITY
+                                    )
+                                    ?.toString()
+                        }
 
                 val parsedTags = tagsRaw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
-                val newItem = WardrobeItemEntity(
-                        id = 0L, // 자동 증가
-                        name = name,
-                        category = category,
-                        imageUri = finalImageUri,
-                        brand = brand.ifBlank { null },
-                        color = color.ifBlank { null },
-                        size = size.ifBlank { null },
-                        favorite = favorite,
-                        tags = parsedTags,
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
-                )
+                val newItem =
+                        WardrobeItemEntity(
+                                id = 0L, // 자동 증가
+                                name = name,
+                                category = category,
+                                imageUri = finalImageUri,
+                                brand = brand.ifBlank { null },
+                                color = color.ifBlank { null },
+                                size = size.ifBlank { null },
+                                favorite = favorite,
+                                tags = parsedTags,
+                                createdAt = System.currentTimeMillis(),
+                                updatedAt = System.currentTimeMillis()
+                        )
 
                 viewModel.upsert(newItem)
 
-                withContext(Dispatchers.Main) {
-                    onSavedAndClose()
-                }
+                withContext(Dispatchers.Main) { onSavedAndClose() }
             }
         }
     }
@@ -214,7 +218,9 @@ fun WardrobeAddScreen(
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("카테고리") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = catMenu) },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = catMenu)
+                                },
                                 modifier = Modifier.fillMaxWidth().menuAnchor()
                         )
                         ExposedDropdownMenu(
@@ -338,35 +344,64 @@ fun WardrobeAddScreen(
                     onPreferenceChange = { preference = it }
             )
         }
-        
-    // 다이얼로그들
-    if (showColorDialog) {
-        SimpleSelectionDialog(
-                title = "색상 선택",
-                options = listOf("블랙", "화이트", "그레이", "네이비", "브라운", "베이지", "레드", "블루", "그린", "옐로우", "핑크", "퍼플"),
-                onSelect = { color = it },
-                onDismiss = { showColorDialog = false }
-        )
-    }
 
-    if (showPatternDialog) {
-        SimpleSelectionDialog(
-                title = "패턴 선택",
-                options = listOf("무지", "스트라이프", "체크", "도트", "플로럴", "지오메트릭", "애니멀", "기타 패턴"),
-                onSelect = { pattern = it },
-                onDismiss = { showPatternDialog = false }
-        )
-    }
+        // 다이얼로그들
+        if (showColorDialog) {
+            SimpleSelectionDialog(
+                    title = "색상 선택",
+                    options =
+                            listOf(
+                                    "블랙",
+                                    "화이트",
+                                    "그레이",
+                                    "네이비",
+                                    "브라운",
+                                    "베이지",
+                                    "레드",
+                                    "블루",
+                                    "그린",
+                                    "옐로우",
+                                    "핑크",
+                                    "퍼플"
+                            ),
+                    onSelect = { color = it },
+                    onDismiss = { showColorDialog = false }
+            )
+        }
 
-    if (showDetailDialog) {
-        SimpleSelectionDialog(
-                title = "상세 분류",
-                options = listOf("티셔츠", "셔츠", "후드티", "스웨터", "블레이저", "코트", "청바지", "슬랙스", "스커트", "원피스", "스니커즈", "구두", "부츠"),
-                onSelect = { detailType = it },
-                onDismiss = { showDetailDialog = false }
-        )
+        if (showPatternDialog) {
+            SimpleSelectionDialog(
+                    title = "패턴 선택",
+                    options = listOf("무지", "스트라이프", "체크", "도트", "플로럴", "지오메트릭", "애니멀", "기타 패턴"),
+                    onSelect = { pattern = it },
+                    onDismiss = { showPatternDialog = false }
+            )
+        }
+
+        if (showDetailDialog) {
+            SimpleSelectionDialog(
+                    title = "상세 분류",
+                    options =
+                            listOf(
+                                    "티셔츠",
+                                    "셔츠",
+                                    "후드티",
+                                    "스웨터",
+                                    "블레이저",
+                                    "코트",
+                                    "청바지",
+                                    "슬랙스",
+                                    "스커트",
+                                    "원피스",
+                                    "스니커즈",
+                                    "구두",
+                                    "부츠"
+                            ),
+                    onSelect = { detailType = it },
+                    onDismiss = { showDetailDialog = false }
+            )
+        }
     }
-}
 }
 
 @Composable
@@ -397,10 +432,7 @@ private fun AssistiveNote() {
 }
 
 @Composable
-private fun ImagePickerSection(
-        imageUri: String?,
-        onPickImage: () -> Unit
-) {
+private fun ImagePickerSection(imageUri: String?, onPickImage: () -> Unit) {
     val context = LocalContext.current
 
     Card(
@@ -440,48 +472,41 @@ private fun ImagePickerSection(
                 }
             } else {
                 // 이미지 프리뷰 (동적 크기 조절)
-                BoxWithConstraints(
-                        modifier = Modifier.fillMaxWidth()
-                ) {
-                    val maxWidthPx = with(LocalDensity.current) {
-                        maxWidth.toPx()
-                    }
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val maxWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
 
                     val imageSize = getImageSize(context, Uri.parse(imageUri))
-                    
-                    val previewHeight = if (imageSize != null) {
-                        val (origW, origH) = imageSize
-                        val aspectRatio = origW.toFloat() / origH.toFloat()
-                        val calculatedHeight = maxWidthPx / aspectRatio
-                        val maxHeightPx = with(LocalDensity.current) {
-                            MaxPreviewHeightDp.toPx()
-                        }
-                        
-                        val finalHeightPx = kotlin.math.min(calculatedHeight, maxHeightPx)
-                        with(LocalDensity.current) { finalHeightPx.toDp() }
-                    } else {
-                        200.dp // 기본값
-                    }
+
+                    val previewHeight =
+                            if (imageSize != null) {
+                                val (origW, origH) = imageSize
+                                val aspectRatio = origW.toFloat() / origH.toFloat()
+                                val calculatedHeight = maxWidthPx / aspectRatio
+                                val maxHeightPx =
+                                        with(LocalDensity.current) { ImageConfig.MAX_PREVIEW_HEIGHT_DP.toPx() }
+
+                                val finalHeightPx = kotlin.math.min(calculatedHeight, maxHeightPx)
+                                with(LocalDensity.current) { finalHeightPx.toDp() }
+                            } else {
+                                200.dp // 기본값
+                            }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         AsyncImage(
                                 model = imageUri,
                                 contentDescription = "선택된 이미지",
-                                modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(previewHeight)
-                                        .clip(RoundedCornerShape(12.dp)),
+                                modifier =
+                                        Modifier.fillMaxWidth()
+                                                .height(previewHeight)
+                                                .clip(RoundedCornerShape(12.dp)),
                                 contentScale = ContentScale.Fit
                         )
-                        
+
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedButton(
-                                    onClick = onPickImage,
-                                    modifier = Modifier.weight(1f)
-                            ) {
+                            OutlinedButton(onClick = onPickImage, modifier = Modifier.weight(1f)) {
                                 Text("다른 사진 선택")
                             }
                         }
@@ -525,10 +550,7 @@ private fun PreferenceSection(
                         style = MaterialTheme.typography.bodyLarge,
                         color = FitGhostColors.TextPrimary
                 )
-                Switch(
-                        checked = favorite,
-                        onCheckedChange = onFavoriteChange
-                )
+                Switch(checked = favorite, onCheckedChange = onFavoriteChange)
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -537,20 +559,14 @@ private fun PreferenceSection(
                         style = MaterialTheme.typography.bodyLarge,
                         color = FitGhostColors.TextPrimary
                 )
-                StarRow(
-                        rating = preference,
-                        onRatingChange = onPreferenceChange
-                )
+                StarRow(rating = preference, onRatingChange = onPreferenceChange)
             }
         }
     }
 }
 
 @Composable
-private fun StarRow(
-        rating: Float,
-        onRatingChange: (Float) -> Unit
-) {
+private fun StarRow(rating: Float, onRatingChange: (Float) -> Unit) {
     Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -565,13 +581,16 @@ private fun StarRow(
                     }
             ) {
                 Icon(
-                        imageVector = when {
-                            filled -> Icons.Outlined.Star
-                            halfFilled -> Icons.Outlined.StarHalf
-                            else -> Icons.Outlined.StarBorder
-                        },
+                        imageVector =
+                                when {
+                                    filled -> Icons.Outlined.Star
+                                    halfFilled -> Icons.Outlined.StarHalf
+                                    else -> Icons.Outlined.StarBorder
+                                },
                         contentDescription = null,
-                        tint = if (filled || halfFilled) FitGhostColors.AccentPrimary else FitGhostColors.TextTertiary,
+                        tint =
+                                if (filled || halfFilled) FitGhostColors.AccentPrimary
+                                else FitGhostColors.TextTertiary,
                         modifier = Modifier.size(24.dp)
                 )
             }
@@ -581,110 +600,92 @@ private fun StarRow(
 
 @Composable
 private fun SimpleSelectionDialog(
-    title: String,
-    options: List<String>,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
+        title: String,
+        options: List<String>,
+        onSelect: (String) -> Unit,
+        onDismiss: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.forEach { opt ->
-                    ElevatedButton(
-                        onClick = {
-                            onSelect(opt)
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(opt)
+            onDismissRequest = onDismiss,
+            confirmButton = {},
+            title = { Text(title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    options.forEach { opt ->
+                        ElevatedButton(
+                                onClick = {
+                                    onSelect(opt)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                        ) { Text(opt) }
                     }
                 }
             }
-        }
     )
 }
 
-// -------- 이미지 유틸: 원본 메타 크기, 샘플링, 리사이즈/저장 --------
+// -------- 이미지 및 파일 유틸 (DRY 개선) --------
+
+/** 이미지 크기 메타데이터 읽기 (메모리 효율적) */
 private fun getImageSize(context: android.content.Context, uri: Uri): Pair<Int, Int>? {
     return runCatching {
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeStream(input, null, opts)
-            val w = opts.outWidth
-            val h = opts.outHeight
-            if (w > 0 && h > 0) Pair(w, h) else null
-        }
-    }.getOrNull()
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val opts =
+                            android.graphics.BitmapFactory.Options().apply {
+                                inJustDecodeBounds = true
+                            }
+                    android.graphics.BitmapFactory.decodeStream(input, null, opts)
+                    val w = opts.outWidth
+                    val h = opts.outHeight
+                    if (w > 0 && h > 0) Pair(w, h) else null
+                }
+            }
+            .getOrNull()
 }
 
-private fun calculateInSampleSize(origW: Int, origH: Int, maxDim: Int): Int {
-    var inSample = 1
-    var halfW = origW / 2
-    var halfH = origH / 2
-    while ((halfW / inSample) >= maxDim || (halfH / inSample) >= maxDim) {
-        inSample *= 2
-    }
-    return max(1, inSample)
-}
-
-private fun resizeBitmapIfNeeded(src: Bitmap, maxDim: Int): Bitmap {
-    val w = src.width
-    val h = src.height
-    if (w <= maxDim && h <= maxDim) return src
-    val scale = if (w >= h) maxDim.toFloat() / w.toFloat() else maxDim.toFloat() / h.toFloat()
-    val nw = (w * scale).toInt().coerceAtLeast(1)
-    val nh = (h * scale).toInt().coerceAtLeast(1)
-    return Bitmap.createScaledBitmap(src, nw, nh, true)
-}
-
+/** 옷장 이미지 저장 디렉토리 확인/생성 */
 private fun ensureWardrobeDir(context: android.content.Context): File {
     val dir = File(context.filesDir, "wardrobe")
     if (!dir.exists()) dir.mkdirs()
     return dir
 }
 
+/** 타임스탬프 기반 고유 파일명 생성 */
 private fun makeOutputFile(context: android.content.Context): File {
-    val ts = System.currentTimeMillis()
-    return File(ensureWardrobeDir(context), "img_$ts.jpg")
+    val timestamp = System.currentTimeMillis()
+    return File(ensureWardrobeDir(context), "wardrobe_$timestamp.jpg")
 }
 
-private fun decodeSampledBitmap(context: android.content.Context, uri: Uri, maxDim: Int): Bitmap? {
-    val size = getImageSize(context, uri) ?: return null
-    val inSample = calculateInSampleSize(size.first, size.second, maxDim)
-    val opts = BitmapFactory.Options().apply { inSampleSize = inSample }
-    return context.contentResolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, opts)
-    }
-}
-
-private fun persistJpeg(context: android.content.Context, bmp: Bitmap, quality: Int): Uri? {
-    val outFile = makeOutputFile(context)
-    return runCatching {
-        FileOutputStream(outFile).use { fos ->
-            bmp.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), fos)
-        }
-        Uri.fromFile(outFile)
-    }.getOrNull()
-}
-
+/**
+ * 이미지 리사이징 및 저장 (ImageUtils 활용)
+ *
+ * WardrobeAddScreen 전용: 이미지를 축소하여 JPEG로 저장
+ */
 private fun resizeAndPersist(
-    context: android.content.Context,
-    source: Uri,
-    maxDimensionPx: Int,
-    quality: Int
+        context: android.content.Context,
+        source: Uri,
+        maxDimensionPx: Int,
+        quality: Int
 ): Uri? {
-    val decoded = decodeSampledBitmap(context, source, maxDimensionPx) ?: return null
-    val resized = resizeBitmapIfNeeded(decoded, maxDimensionPx)
-    if (resized !== decoded) {
-        decoded.recycle()
+    val outputFile = makeOutputFile(context)
+    return if (com.fitghost.app.utils.ImageUtils.saveAsJpeg(
+                    context,
+                    source,
+                    outputFile,
+                    maxDimensionPx,
+                    quality
+            )
+    ) {
+        Uri.fromFile(outputFile)
+    } else {
+        null
     }
-    return persistJpeg(context, resized, quality)
 }
 
-// 카테고리 이름 표시
-private fun categoryName(category: WardrobeCategory): String = WardrobeUiUtil.categoryLabel(category)
+// -------- UI 유틸 --------
+
+/** 카테고리 이름 표시 */
+private fun categoryName(category: WardrobeCategory): String =
+        WardrobeUiUtil.categoryLabel(category)

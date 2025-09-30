@@ -3,26 +3,37 @@ package com.fitghost.app.engine
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import android.util.Base64
+import android.util.Log
 import com.fitghost.app.BuildConfig
 import com.fitghost.app.utils.ApiKeyManager
+import com.fitghost.app.utils.GeminiApiHelper
 import com.fitghost.app.utils.ImageUtils
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
- * CloudTryOnEngine
- * - Gemini 2.5 이미지 합성(미리보기)으로 가상 피팅 프리뷰 생성
- * - PRD의 개인정보 원칙을 준수하기 위해 기본 비활성(Feature Flag)이며, 사용 시 명시적 옵트인 필요
- * - 실패 시 FakeTryOnEngine으로 폴백
+ * CloudTryOnEngine - Gemini 2.5 Flash Image Preview 가상 피팅 엔진
+ *
+ * Google Gemini API를 사용한 클라우드 기반 가상 피팅 구현
+ *
+ * 주요 특징:
+ * - PRD 개인정보 원칙 준수: 기본 비활성 (CLOUD_TRYON_ENABLED=false)
+ * - 실패 시 자동 폴백: FakeTryOnEngine으로 로컬 합성 제공
+ * - 오프라인 대응: IOException 감지 시 친화적 에러 메시지
+ * - DRY 원칙: GeminiApiHelper로 공통 로직 통합
+ *
+ * @param client OkHttp 클라이언트 (테스트용 주입 가능)
  */
 class CloudTryOnEngine(private val client: OkHttpClient = OkHttpClient()) : TryOnEngine {
+
+    companion object {
+        private const val TAG = "CloudTryOnEngine"
+    }
 
     override suspend fun renderPreview(
             context: Context,
@@ -33,138 +44,92 @@ class CloudTryOnEngine(private val client: OkHttpClient = OkHttpClient()) : TryO
             withContext(Dispatchers.IO) {
                 val apiKey = ApiKeyManager.requireGeminiVertexApiKey()
 
-                // 1) 입력 이미지 로드 → PNG로 인코딩 → base64
-                // 과금 최적화: 해상도 상한 적용 (가로세로 비율 유지)
-                val modelB64 =
-                        Base64.encodeToString(
+                // 1) 이미지 로드 및 변환 (과금 최적화: 해상도 제한)
+                val modelPng =
+                        ImageUtils.uriToPngBytesCapped(
+                                context,
+                                modelUri,
+                                BuildConfig.TRYON_MAX_SIDE_PX
+                        )
+
+                val maxTotal = BuildConfig.MAX_TRYON_TOTAL_IMAGES.coerceAtLeast(2)
+                val maxClothes = (maxTotal - 1).coerceAtLeast(1)
+
+                val clothingPngs =
+                        clothingUris.take(maxClothes).mapNotNull { uri ->
+                            runCatching {
                                 ImageUtils.uriToPngBytesCapped(
                                         context,
-                                        modelUri,
-                                        com.fitghost.app.BuildConfig.TRYON_MAX_SIDE_PX
-                                ),
-                                Base64.NO_WRAP
-                        )
-                val maxTotal = com.fitghost.app.BuildConfig.MAX_TRYON_TOTAL_IMAGES.coerceAtLeast(2)
-                val maxClothes = (maxTotal - 1).coerceAtLeast(1)
-                val clothingB64s =
-                        clothingUris.take(maxClothes).mapNotNull {
-                            runCatching {
-                                        Base64.encodeToString(
-                                                ImageUtils.uriToPngBytesCapped(
-                                                        context,
-                                                        it,
-                                                        com.fitghost.app.BuildConfig
-                                                                .TRYON_MAX_SIDE_PX
-                                                ),
-                                                Base64.NO_WRAP
-                                        )
-                                    }
-                                    .getOrNull()
-                        }
-
-                // 2) 시스템 프롬프트(고정 제약 + 사용자 프롬프트를 system으로 합침)
-                val finalSystem = TryOnPromptBuilder.buildSystemText(systemPrompt)
-
-                // 3) REST 요청 페이로드 구성 (Generative Language API)
-                val userParts =
-                        JSONArray().apply {
-                            // 텍스트 먼저(시스템 가이드를 결합하여 단일 텍스트로 전달)
-                            val combinedText =
-                                    (finalSystem +
-                                                    "\n\n" +
-                                                    TryOnPromptBuilder.buildUserInstruction(
-                                                            hasModel = true,
-                                                            clothingCount = clothingB64s.size
-                                                    ))
-                                            .trim()
-                            put(JSONObject().put("text", combinedText))
-                            // 모델 이미지
-                            put(
-                                    JSONObject()
-                                            .put(
-                                                    "inline_data",
-                                                    JSONObject()
-                                                            .put("mime_type", "image/png")
-                                                            .put("data", modelB64)
-                                            )
-                            )
-                            // 의상 이미지들
-                            clothingB64s.forEach { b64 ->
-                                put(
-                                        JSONObject()
-                                                .put(
-                                                        "inline_data",
-                                                        JSONObject()
-                                                                .put("mime_type", "image/png")
-                                                                .put("data", b64)
-                                                )
+                                        uri,
+                                        BuildConfig.TRYON_MAX_SIDE_PX
                                 )
                             }
+                                    .getOrElse {
+                                        Log.w(TAG, "Failed to load clothing image: $uri", it)
+                                        null
+                                    }
                         }
 
-                val userContent = JSONObject().put("role", "user").put("parts", userParts)
+                if (clothingUris.size > clothingPngs.size) {
+                    Log.w(TAG, "Some clothing images failed to load or were truncated")
+                }
 
-                val body =
-                        JSONObject()
-                                .put("contents", JSONArray().put(userContent))
-                                .put(
-                                        "generationConfig",
-                                        JSONObject()
-                                                .put("temperature", 0.25)
-                                                .put("candidateCount", 1)
-                                )
+                // 2) Gemini API 요청 본문 생성 (GeminiApiHelper 사용)
+                val requestBodyJson =
+                        GeminiApiHelper.buildTryOnRequestJson(modelPng, clothingPngs, systemPrompt)
 
+                val body = requestBodyJson.toRequestBody("application/json".toMediaType())
+
+                // 3) API 엔드포인트 및 요청 생성
                 val url =
                         "https://generativelanguage.googleapis.com/v1beta/models/" +
                                 "gemini-2.5-flash-image-preview:generateContent?key=$apiKey"
 
-                val request =
-                        Request.Builder()
-                                .url(url)
-                                .post(
-                                        body.toString()
-                                                .toRequestBody("application/json".toMediaType())
-                                )
-                                .build()
+                val request = Request.Builder().url(url).post(body).build()
 
-                // 4) API 호출 → 이미지 파싱. 실패 시 로컬 합성 폴백
+                Log.d(TAG, "Calling Gemini API (model=1, clothes=${clothingPngs.size})")
+
+                // 4) API 호출 및 응답 처리
                 runCatching {
-                    client.newCall(request).execute().use { resp ->
-                        if (!resp.isSuccessful) error("HTTP ${'$'}{resp.code}")
-                        val text = resp.body?.string() ?: error("Empty body")
-                        val png = extractInlineImage(text)
-                        return@withContext ImageUtils.decodePng(png)
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            val errorBody = response.body?.string() ?: "Unknown error"
+                            throw GeminiApiHelper.GeminiApiException(
+                                    "HTTP ${response.code}: ${response.message} - $errorBody"
+                            )
+                        }
+
+                        val responseText =
+                                response.body?.string()
+                                        ?: throw GeminiApiHelper.GeminiApiException(
+                                                "Empty response body"
+                                        )
+
+                        Log.d(TAG, "Gemini API response received, parsing image...")
+
+                        // GeminiApiHelper로 이미지 추출 (DRY)
+                        val imageBytes = GeminiApiHelper.extractImageFromResponse(responseText)
+                        return@withContext ImageUtils.decodePng(imageBytes)
                     }
                 }
-                        .getOrElse {
+                        .getOrElse { exception ->
+                            // 에러 로깅
+                            when (exception) {
+                                is IOException -> {
+                                    Log.e(TAG, "Network error during virtual try-on", exception)
+                                }
+                                is GeminiApiHelper.GeminiApiException -> {
+                                    Log.e(TAG, "Gemini API error: ${exception.message}", exception)
+                                }
+                                else -> {
+                                    Log.e(TAG, "Unexpected error during virtual try-on", exception)
+                                }
+                            }
+
                             // 폴백: 로컬 FakeTryOnEngine 사용 (워터마크 프리뷰)
+                            Log.d(TAG, "Falling back to local FakeTryOnEngine")
                             FakeTryOnEngine()
                                     .renderPreview(context, modelUri, clothingUris, systemPrompt)
                         }
             }
-
-    /** candidates[0].content.parts[*].inlineData.data (또는 inline_data.data)에서 PNG base64 추출 */
-    private fun extractInlineImage(json: String): ByteArray {
-        val root = JSONObject(json)
-        val candidates = root.optJSONArray("candidates") ?: error("No candidates")
-        if (candidates.length() == 0) error("Empty candidates")
-        val content = candidates.getJSONObject(0).optJSONObject("content") ?: error("No content")
-        val parts = content.optJSONArray("parts") ?: error("No parts")
-        for (i in 0 until parts.length()) {
-            val p = parts.getJSONObject(i)
-            // camelCase 우선
-            if (p.has("inlineData")) {
-                val inline = p.getJSONObject("inlineData")
-                val dataB64 = inline.getString("data")
-                return Base64.decode(dataB64, Base64.DEFAULT)
-            }
-            // 일부 응답 변형(snake_case) 수용
-            if (p.has("inline_data")) {
-                val inline = p.getJSONObject("inline_data")
-                val dataB64 = inline.getString("data")
-                return Base64.decode(dataB64, Base64.DEFAULT)
-            }
-        }
-        error("No inline image in parts")
-    }
 }
