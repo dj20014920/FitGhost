@@ -81,6 +81,13 @@ android {
                 ?: System.getenv("MAX_TRYON_TOTAL_IMAGES") ?: "4")
         buildConfigField("int", "MAX_TRYON_TOTAL_IMAGES", maxTryOnTotalImages)
 
+        // Max side pixels for each uploaded image (preserve aspect ratio). Default 1024.
+        val tryOnMaxSidePx =
+            (localProperties.getProperty("TRYON_MAX_SIDE_PX")
+                ?: (project.findProperty("TRYON_MAX_SIDE_PX") as String?)
+                ?: System.getenv("TRYON_MAX_SIDE_PX") ?: "1024")
+        buildConfigField("int", "TRYON_MAX_SIDE_PX", tryOnMaxSidePx)
+
         // Debug-only emergency: allow insecure TLS for NanoBanana (hostname mismatch)
         // Default false. Enable ONLY for local debug if server cert is misconfigured.
         val allowInsecureTls = (localProperties.getProperty("ALLOW_INSECURE_TLS")
