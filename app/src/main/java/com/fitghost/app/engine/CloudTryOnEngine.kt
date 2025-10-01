@@ -23,7 +23,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *
  * 주요 특징:
  * - PRD 개인정보 원칙 준수: 기본 비활성 (CLOUD_TRYON_ENABLED=false)
- * - 실패 시 자동 폴백: FakeTryOnEngine으로 로컬 합성 제공
+ * - 폴백 제거: 실패 시 예외를 그대로 전파
  * - 오프라인 대응: IOException 감지 시 친화적 에러 메시지
  * - DRY 원칙: GeminiApiHelper로 공통 로직 통합
  *
@@ -113,23 +113,13 @@ class CloudTryOnEngine(private val client: OkHttpClient = OkHttpClient()) : TryO
                     }
                 }
                         .getOrElse { exception ->
-                            // 에러 로깅
+                            // 폴백 제거: 에러 로깅 후 그대로 전파
                             when (exception) {
-                                is IOException -> {
-                                    Log.e(TAG, "Network error during virtual try-on", exception)
-                                }
-                                is GeminiApiHelper.GeminiApiException -> {
-                                    Log.e(TAG, "Gemini API error: ${exception.message}", exception)
-                                }
-                                else -> {
-                                    Log.e(TAG, "Unexpected error during virtual try-on", exception)
-                                }
+                                is IOException -> Log.e(TAG, "Network error during virtual try-on", exception)
+                                is GeminiApiHelper.GeminiApiException -> Log.e(TAG, "Gemini API error: ${exception.message}", exception)
+                                else -> Log.e(TAG, "Unexpected error during virtual try-on", exception)
                             }
-
-                            // 폴백: 로컬 FakeTryOnEngine 사용 (워터마크 프리뷰)
-                            Log.d(TAG, "Falling back to local FakeTryOnEngine")
-                            FakeTryOnEngine()
-                                    .renderPreview(context, modelUri, clothingUris, systemPrompt)
+                            throw exception
                         }
             }
 }

@@ -1,8 +1,11 @@
 package com.fitghost.app.ui.screens.wardrobe
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,9 +23,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.fitghost.app.ai.ModelManager
+import com.fitghost.app.ai.WardrobeAutoComplete
 import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
 import com.fitghost.app.ui.theme.FitGhostColors
@@ -79,6 +85,24 @@ fun WardrobeAddScreen(
 
     // 입력 가이드 표시 여부
     val showNameHelper = name.isBlank()
+    
+    // AI 자동 완성 관련 상태
+    val modelManager = remember { ModelManager.getInstance(context) }
+    val autoComplete = remember { WardrobeAutoComplete(context) }
+    // 앱이 비정상 종료되어 DOWNLOADING 상태로 남아있거나 깨진 파일이 있을 수 있으므로, 화면 진입 시 상태 정합성 복구
+    var modelState by remember { mutableStateOf(ModelManager.ModelState.NOT_READY) }
+    LaunchedEffect(Unit) {
+        // DataStore 상태와 파일 상태 동기화
+        val reconciled = modelManager.reconcileState()
+        modelState = reconciled
+        // 이후부터는 상태 스트림을 구독하여 즉시 반영
+        modelManager.observeModelState().collect { state -> modelState = state }
+    }
+    var showModelDownloadDialog by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf<ModelManager.DownloadProgress?>(null) }
+    var isAutoCompleting by remember { mutableStateOf(false) }
+    var showAutoCompleteError by remember { mutableStateOf(false) }
+    var autoCompleteErrorMessage by remember { mutableStateOf("") }
 
     // 갤러리에서 이미지 선택
     val pickImageLauncher =
@@ -89,6 +113,95 @@ fun WardrobeAddScreen(
 
     // 카테고리 메뉴 표시 여부
     var catMenu by remember { mutableStateOf(false) }
+    
+    // 자동 완성 함수
+    fun performAutoComplete() {
+        if (imageUri == null) {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    "먼저 사진을 선택해 주세요",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            return
+        }
+        
+        scope.launch {
+            isAutoCompleting = true
+            
+            try {
+                // URI에서 Bitmap 로드
+                val bitmap = withContext(Dispatchers.IO) {
+                    val uri = Uri.parse(imageUri)
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
+                }
+                
+                if (bitmap == null) {
+                    throw Exception("이미지를 로드할 수 없습니다")
+                }
+                
+                // AI 분석
+                val result = autoComplete.analyzeClothingImage(bitmap)
+                
+                result.onSuccess { metadata ->
+                    // 결과 적용
+                    name = metadata.name
+                    category = metadata.toCategoryEnum()
+                    color = metadata.color
+                    detailType = metadata.detailType
+                    pattern = metadata.pattern
+                    brand = metadata.brand
+                    tagsRaw = metadata.tags.joinToString(", ")
+                    description = metadata.description
+                    
+                    snackbarHostState.showSnackbar(
+                        "✨ 자동 완성되었습니다!",
+                        duration = SnackbarDuration.Short
+                    )
+                }.onFailure { error ->
+                    autoCompleteErrorMessage = error.message ?: "알 수 없는 오류"
+                    showAutoCompleteError = true
+                }
+            } catch (e: Exception) {
+                autoCompleteErrorMessage = e.message ?: "알 수 없는 오류"
+                showAutoCompleteError = true
+            } finally {
+                isAutoCompleting = false
+            }
+        }
+    }
+    
+    // 모델 다운로드 함수
+    fun startModelDownload() {
+        // 다이얼로그는 즉시 닫고, 화면 내 버튼/카드에서 진행률만 표시
+        showModelDownloadDialog = false
+        scope.launch {
+            downloadProgress = ModelManager.DownloadProgress(0f, 1.5f, 0)
+            
+            val result = modelManager.downloadModel { progress ->
+                downloadProgress = progress
+            }
+            
+            result.onSuccess {
+                downloadProgress = null
+                showModelDownloadDialog = false
+                snackbarHostState.showSnackbar(
+                    "AI 모델 준비가 완료되었습니다!",
+                    duration = SnackbarDuration.Short
+                )
+                // 다운로드 완료 후 바로 자동 완성 실행
+                performAutoComplete()
+            }.onFailure { error ->
+                downloadProgress = null
+                snackbarHostState.showSnackbar(
+                    "다운로드 실패: ${error.message}",
+                    duration = SnackbarDuration.Long
+                )
+            }
+        }
+    }
 
     fun save() {
         if (name.isBlank()) {
@@ -177,6 +290,16 @@ fun WardrobeAddScreen(
             ImagePickerSection(
                     imageUri = imageUri,
                     onPickImage = { pickImageLauncher.launch("image/*") }
+            )
+            
+            // AI 자동 완성 버튼
+            AutoCompleteSection(
+                imageUri = imageUri,
+                modelState = modelState,
+                downloadProgress = downloadProgress,
+                isAutoCompleting = isAutoCompleting,
+                onAskDownload = { showModelDownloadDialog = true },
+                onPerformAutoComplete = { performAutoComplete() }
             )
 
             // 기본 정보 입력 카드
@@ -399,6 +522,34 @@ fun WardrobeAddScreen(
                             ),
                     onSelect = { detailType = it },
                     onDismiss = { showDetailDialog = false }
+            )
+        }
+        
+        // 모델 다운로드 유도 다이얼로그
+        if (showModelDownloadDialog) {
+            ModelDownloadDialog(
+                onConfirm = {
+                    startModelDownload()
+                },
+                onDismiss = {
+                    showModelDownloadDialog = false
+                },
+                isDownloading = downloadProgress != null,
+                progress = downloadProgress
+            )
+        }
+        
+        // 자동 완성 에러 다이얼로그
+        if (showAutoCompleteError) {
+            AlertDialog(
+                onDismissRequest = { showAutoCompleteError = false },
+                title = { Text("자동 완성 실패") },
+                text = { Text(autoCompleteErrorMessage) },
+                confirmButton = {
+                    TextButton(onClick = { showAutoCompleteError = false }) {
+                        Text("확인")
+                    }
+                }
             )
         }
     }
@@ -689,3 +840,280 @@ private fun resizeAndPersist(
 /** 카테고리 이름 표시 */
 private fun categoryName(category: WardrobeCategory): String =
         WardrobeUiUtil.categoryLabel(category)
+
+// -------- AI 자동 완성 UI 컴포넌트 --------
+
+/**
+ * AI 자동 완성 섹션
+ */
+@Composable
+private fun AutoCompleteSection(
+    imageUri: String?,
+    modelState: ModelManager.ModelState,
+    downloadProgress: ModelManager.DownloadProgress?,
+    isAutoCompleting: Boolean,
+    onAskDownload: () -> Unit,
+    onPerformAutoComplete: () -> Unit
+) {
+    // 스마트 UX: 상태에 맞게 CTA 텍스트/아이콘/설명/활성화를 동적으로 구성
+    val ctaEnabled = downloadProgress == null && !isAutoCompleting
+    val (ctaLabel, ctaIcon, ctaOnClick) = when {
+        modelState == ModelManager.ModelState.DOWNLOADING || downloadProgress != null -> Triple("다운로드 중...", Icons.Outlined.Download) { }
+        modelState == ModelManager.ModelState.READY -> Triple("자동 완성 ✨", Icons.Outlined.AutoAwesome) { onPerformAutoComplete() }
+        modelState == ModelManager.ModelState.NOT_READY || modelState == ModelManager.ModelState.ERROR -> Triple("AI 모델 다운로드", Icons.Outlined.Download) { onAskDownload() }
+        else -> Triple("자동 완성", Icons.Outlined.AutoAwesome) { onPerformAutoComplete() }
+    }
+
+    AnimatedVisibility(visible = imageUri != null) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.1f)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+
+                    // 다운로드 중
+                    downloadProgress != null -> {
+                        DownloadProgressView(downloadProgress)
+                    }
+                    // 자동 완성 중
+                    isAutoCompleting -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = FitGhostColors.AccentPrimary
+                            )
+                            Text(
+                                text = "분석 중...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = FitGhostColors.TextPrimary
+                            )
+                        }
+                    }
+                    // 자동 완성 버튼
+                    else -> {
+                        // CTA 버튼: 상태별로 텍스트/아이콘/동작/활성화 변경
+                        ElevatedButton(
+                            onClick = ctaOnClick,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = ctaEnabled,
+                            colors = ButtonDefaults.elevatedButtonColors(
+                                containerColor = FitGhostColors.AccentPrimary,
+                                contentColor = FitGhostColors.TextInverse
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(
+                                defaultElevation = 4.dp,
+                                pressedElevation = 8.dp
+                            )
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = ctaIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = ctaLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 하단 가이드: 상태에 따라 도움말 제공
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val helper = when {
+                    modelState == ModelManager.ModelState.NOT_READY -> "한 번만 다운로드하면 오프라인에서도 빠르게 자동 완성할 수 있어요."
+                    modelState == ModelManager.ModelState.DOWNLOADING || downloadProgress != null -> "다운로드가 완료되면 자동 완성을 실행할 수 있어요."
+                    modelState == ModelManager.ModelState.ERROR -> "네트워크 상태/저장 공간을 확인하고 다시 시도해 주세요."
+                    modelState == ModelManager.ModelState.READY -> "이제 AI가 자동으로 이름/카테고리/색상 등을 채워줘요."
+                    else -> null
+                }
+                if (helper != null) {
+                    Text(
+                        text = helper,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FitGhostColors.TextSecondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 다운로드 진행률 표시
+ */
+@Composable
+private fun DownloadProgressView(progress: ModelManager.DownloadProgress) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "AI 모델 다운로드 중",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = FitGhostColors.TextPrimary
+            )
+            Text(
+                text = "${progress.percentage}%",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = FitGhostColors.AccentPrimary
+            )
+        }
+        
+        LinearProgressIndicator(
+            progress = { progress.percentage / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = FitGhostColors.AccentPrimary,
+        )
+        
+        Text(
+            text = "${String.format("%.1f", progress.downloadedMB)} MB / ${String.format("%.1f", progress.totalMB)} MB",
+            style = MaterialTheme.typography.bodySmall,
+            color = FitGhostColors.TextSecondary,
+            modifier = Modifier.align(Alignment.End)
+        )
+    }
+}
+
+/**
+ * 모델 다운로드 유도 다이얼로그
+ */
+@Composable
+private fun ModelDownloadDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    isDownloading: Boolean,
+    progress: ModelManager.DownloadProgress?
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isDownloading) onDismiss() },
+        title = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = FitGhostColors.AccentPrimary
+                )
+                Text("AI 자동 완성 기능")
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (isDownloading && progress != null) {
+                    // 다운로드 중
+                    DownloadProgressView(progress)
+                } else {
+                    // 다운로드 유도
+                    Text(
+                        text = "처음 한 번만 다운받으면 계속 사용이 가능해요!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    Divider()
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FeatureItem(
+                            icon = Icons.Outlined.PhotoCamera,
+                            text = "사진만 찍으면 자동으로 정보 입력"
+                        )
+                        FeatureItem(
+                            icon = Icons.Outlined.Speed,
+                            text = "빠르고 정확한 AI 분석"
+                        )
+                        FeatureItem(
+                            icon = Icons.Outlined.Storage,
+                            text = "약 782 MB (고품질 온디바이스 AI)"
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!isDownloading) {
+                Button(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FitGhostColors.AccentPrimary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("다운로드 시작")
+                }
+            }
+        },
+        dismissButton = {
+            if (!isDownloading) {
+                TextButton(onClick = onDismiss) {
+                    Text("나중에")
+                }
+            }
+        }
+    )
+}
+
+/**
+ * 기능 아이템 (다이얼로그용)
+ */
+@Composable
+private fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = FitGhostColors.AccentPrimary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = FitGhostColors.TextPrimary
+        )
+    }
+}

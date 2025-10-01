@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.fitghost.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.fitghost.app"
@@ -127,14 +127,28 @@ android {
         buildConfig = true
     }
 
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+    // NDK + CMake (임베드 서버)
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
     }
 
-    kotlinOptions { jvmTarget = "1.8" }
+    defaultConfig {
+        // 임베드 우선 arm64-v8a만 포함 (릴리즈 기준)
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions { jvmTarget = "17" }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
@@ -177,6 +191,9 @@ dependencies {
     
     // Google AI Gemini
     implementation("com.google.ai.client.generativeai:generativeai:0.7.0")
+    
+    // On-device AI via local llama.cpp server (OpenAI 호환)
+    // (Android 바인딩 제거)
 
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
