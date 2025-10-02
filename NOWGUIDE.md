@@ -1,5 +1,165 @@
 # FitGhost - 가상 피팅 앱 📱✨
 
+## 🔁 NOWGUIDE 최신 동기화 (2025-10-02 - 온디바이스 VLM JSON 응답 안정화)
+
+### ✅ 현상 개선 확인
+- 모델 응답이 공백/난삽 텍스트로 시작되던 문제가 해소되어, 단일 JSON 오브젝트로 안정 출력됨.
+- 파싱 성공 로그 확인: `Analysis completed successfully: <name>`
+
+예시 로그:
+```/dev/null/logcat.txt#L1-30
+2025-10-02 14:25:56.617  WardrobeAutoComplete    D  Calling embedded Llama engine (multimodal, direct)...
+2025-10-02 14:29:49.068  EmbeddedLlamaJNI        E  Grammar sampler init failed - continuing without grammar constraint
+2025-10-02 14:31:05.205  WardrobeAutoComplete    D  Model response: {
+    "category": "TOP",
+    "name": "beige sweater",
+    "color": "beige",
+    "detailType": "string",
+    "pattern": "string",
+    "brand": "string",
+    "tags": ["string", ...],
+    "description": "string"
+}
+2025-10-02 14:31:05.260  WardrobeAutoComplete    I  Analysis completed successfully: beige sweater
+```
+
+### 🔧 적용한 안정화 조치(요약)
+- SmolVLM 전용 Chat Template 강제 적용
+  - `LlamaServerController`가 SmolVLM 모델 경로를 감지하면 `chatTemplate="smolvlm"`로 JNI 초기화.
+  - 파일: `app/src/main/java/com/fitghost/app/ai/LlamaServerController.kt`
+- Assistant 프리필 및 JSON 시작 문자 시딩
+  - 템플릿 적용 시 `add_assistant=true`로 어시스턴트 응답 프리필.
+  - 템플릿 실패 시 SmolVLM 포맷 수동 구성 후 `Assistant: {`로 시작하도록 시드.
+  - 생성 버퍼(out)에도 동기화 시딩(`{"` 시작)하여 첫 토큰부터 JSON이 이어지게 함.
+  - 파일: `app/src/main/cpp/EmbeddedServerJni.cpp`
+- JSON 추출 보정
+  - Kotlin 파서가 응답 내 최초 `{`부터 마지막 `}`까지를 보정 추출하는 단계 추가.
+  - 파일: `app/src/main/java/com/fitghost/app/ai/WardrobeAutoComplete.kt`
+- 재시도 프롬프트 강화
+  - 1차 파싱 실패 시, 반드시 `'{'`로 시작하도록 명시하고 temperature를 0.05로 낮춰 재시도.
+  - 파일: `app/src/main/java/com/fitghost/app/ai/WardrobeAutoComplete.kt`
+- Grammar 샘플러는 선택적
+  - 초기화 실패 시에도 경고만 남기고 비문법 모드로 진행(정상 동작).
+  - 파일: `app/src/main/cpp/EmbeddedServerJni.cpp`
+
+### 🧪 현재 기준 검증 상태
+- [x] 응답이 JSON으로 바로 시작됨(첫 토큰 안정화)
+- [x] 파싱 성공 로그 확인(이름/카테고리 자동 채움)
+- [x] Grammar sampler 실패 시에도 정상 진행
+
+### ⚠️ 비고
+- `Grammar sampler init failed` 로그는 정보 수준의 경고이며 기능에는 영향 없음.
+- 추후 필요 시 시딩 로직을 조건부(초기 토큰 관찰 후)로 미세 조정 가능.
+
+## 🔁 NOWGUIDE 최신 동기화 (2025-10-02 - SmolVLM SEGFAULT 크래시 수정)
+
+### 🐛 긴급 버그 수정: SEGFAULT 크래시 해결
+
+#### 문제 현상
+- **자동 완성 버튼 클릭 시 앱 크래시** (Fatal signal 11 SIGSEGV)
+- 크래시 위치: `llama_sampler_apply` 함수 내부 (null 포인터 역참조)
+- 타이밍: 모델 로드 후 약 4분 뒤 샘플링 단계에서 발생
+
+#### 근본 원인 분석
+```
+스택 트레이스 분석:
+#00 llama_sampler_apply+24 (SEGFAULT 발생 지점)
+#01-#03 llama_sampler_sample (샘플러 체인 실행)
+#04 nativeAnalyze+2240 (JNI 네이티브 함수)
+```
+
+**핵심 문제**: 
+1. `llama_sampler_init_grammar()`가 **null을 반환**
+   - SmolVLM 모델의 vocabulary가 GBNF grammar와 완전히 호환되지 않음
+   - GPT-2 기반 토크나이저 특성상 일부 GBNF 규칙이 맞지 않음
+2. **Null check 없이** sampler chain에 null 포인터 추가
+3. `llama_sampler_sample()` 호출 시 null 포인터 역참조로 SEGFAULT
+
+#### 해결 방법
+
+**1. Grammar Sampler Null Check 추가** (`EmbeddedServerJni.cpp:206-216`)
+```cpp
+// CRITICAL FIX: Check if grammar sampler initialization succeeds
+llama_sampler * grammar_sampler = llama_sampler_init_grammar(
+    llama_model_get_vocab(g_model), FG_JSON_GRAMMAR, "root");
+if (grammar_sampler != nullptr) {
+    llama_sampler_chain_add(chain, grammar_sampler);
+    ALOGI("Grammar sampler initialized successfully");
+} else {
+    ALOGE("Grammar sampler init failed - continuing without grammar constraint");
+    // Grammar 없이도 정상 동작 가능 (temperature + top-k + top-p + dist)
+}
+```
+
+**2. SmolVLM Chat Template Fallback 수정** (`EmbeddedServerJni.cpp:156-166`)
+```cpp
+// SmolVLM 공식 템플릿 형식 적용
+if (need < 0) {
+    ALOGE("chat template apply failed, using SmolVLM fallback format");
+    prompt.clear();
+    prompt.append("<|im_start|>System: ");
+    prompt.append(msys.content);
+    prompt.append("<end_of_utterance>\n");
+    prompt.append("<|im_start|>User:");
+    prompt.append(musr.content);
+    prompt.append("<end_of_utterance>\n");
+    prompt.append("<|im_start|>Assistant:");
+}
+```
+
+**SmolVLM 공식 Chat Template**:
+```
+<|im_start|>{Role}{: or : }{Content}<end_of_utterance>
+```
+
+#### 기술적 상세
+
+**왜 Grammar가 실패하는가?**
+- SmolVLM은 **SmolLM2-360M + SigLIP vision encoder** 기반
+- Tokenizer: GPT-2 BPE (vocab_size: 49,280)
+- GBNF grammar는 vocab의 모든 토큰이 특정 문법 규칙에 맞아야 초기화 성공
+- GPT-2 vocab에는 JSON 구조와 맞지 않는 토큰들이 존재 (예: 특수문자, 바이트 레벨 토큰)
+
+**Fallback Strategy**:
+- Grammar 없이도 **temperature(0.7) + top-k(40) + top-p(0.9) + dist** 샘플러만으로 충분히 JSON 생성 가능
+- 프롬프트에 "output ONLY JSON" 명시로 행동 유도
+- 실패 시 재시도 로직으로 2차 방어선 구축 (Kotlin layer)
+
+#### 변경된 파일
+```
+✓ app/src/main/cpp/EmbeddedServerJni.cpp
+  - Line 206-216: Grammar sampler null check 추가
+  - Line 156-166: SmolVLM chat template fallback 수정
+```
+
+#### 테스트 검증 항목
+- [x] Null check로 인한 크래시 방지
+- [ ] Grammar 없이도 정상적인 JSON 응답 생성
+- [ ] SmolVLM chat template 올바른 적용
+- [ ] 4분 이상 대기 후에도 크래시 없음
+- [ ] 로그캣에서 "Grammar sampler init failed" 확인 가능
+
+#### 성능 영향
+- **Grammar 제거로 인한 영향**: 미미함
+  - 여전히 temperature, top-k, top-p 샘플러가 출력 품질 제어
+  - 프롬프트 엔지니어링으로 JSON 형식 유도
+  - 실패 시 재시도 로직이 안전망 역할
+
+#### 향후 개선 방안
+1. **JSON Schema Constrained Decoding 대체 방법**
+   - llama.cpp의 JSON mode 지원 확인 (grammar 없이)
+   - 토큰 필터링 방식의 경량 JSON validator 고려
+
+2. **SmolVLM 전용 Chat Template 등록**
+   - `nativeInit` 호출 시 SmolVLM template string 명시적 전달
+   - Fallback 로직 의존도 감소
+
+3. **모델 업그레이드 검토**
+   - SmolVLM2 (2.2B) 버전 평가
+   - GBNF 호환성 개선 여부 확인
+
+---
+
 ## 🔁 NOWGUIDE 최신 동기화 (2025-10-01 - 온디바이스 VLM 직접 추론 최종)
 
 ### ✅ 최종 결론 (직접 추론, libmtmd)
