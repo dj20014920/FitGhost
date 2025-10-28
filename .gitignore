@@ -13,3 +13,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Model files (downloaded from server, not committed)
+*.gguf
+*.onnx
+*.pth
+*.pt
+*.h5
+*.model
+ghostfit_models/
+tmp/*.gguf
+
+# Cloudflare workers local secrets (do not commit)
+workers/**/.dev.vars

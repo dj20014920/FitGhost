@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.fitghost.app.BuildConfig
-import com.fitghost.app.utils.ApiKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.net.ssl.SSLPeerUnverifiedException
@@ -24,8 +23,8 @@ import javax.net.ssl.SSLPeerUnverifiedException
  */
 class CompositeTryOnEngine : TryOnEngine {
 
-    private val cloudEnabled = BuildConfig.CLOUD_TRYON_ENABLED && ApiKeyManager.isGeminiVertexApiKeyValid()
-    private val nanoApiKeyValid = BuildConfig.NANOBANANA_API_KEY.isNotBlank()
+    private val proxyConfigured = BuildConfig.PROXY_BASE_URL.isNotBlank()
+    private val cloudEnabled = BuildConfig.CLOUD_TRYON_ENABLED && proxyConfigured
 
     private val cloud by lazy { CloudTryOnEngine() }
     private val nano by lazy { NanoBananaTryOnEngine() }
@@ -38,16 +37,18 @@ class CompositeTryOnEngine : TryOnEngine {
         systemPrompt: String?
     ): Bitmap = withContext(Dispatchers.IO) {
         
-        Log.d(TAG, "Starting virtual try-on - nano API valid: $nanoApiKeyValid, cloud enabled: $cloudEnabled")
+        require(proxyConfigured) {
+            "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시 설정을 먼저 완료해주세요."
+        }
+
+        Log.d(TAG, "Starting virtual try-on - proxy configured, cloud enabled: $cloudEnabled")
 
         // 1차: NanoBanana (Google Gemini 2.5 Flash Image Preview) 우선 시도
-        if (nanoApiKeyValid) {
-            try {
-                Log.d(TAG, "Trying NanoBananaTryOnEngine (Google Gemini 2.5 Flash Image Preview)")
-                return@withContext nano.renderPreview(context, modelUri, clothingUris, systemPrompt)
-            } catch (e: Exception) {
-                Log.w(TAG, "NanoBananaTryOnEngine failed: ${e.message}", e)
-            }
+        try {
+            Log.d(TAG, "Trying NanoBananaTryOnEngine (proxy-backed Gemini endpoint)")
+            return@withContext nano.renderPreview(context, modelUri, clothingUris, systemPrompt)
+        } catch (e: Exception) {
+            Log.w(TAG, "NanoBananaTryOnEngine failed: ${e.message}", e)
         }
 
         // 2차: Cloud 엔진 시도 (활성화된 경우)

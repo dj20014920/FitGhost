@@ -3,11 +3,6 @@ package com.fitghost.app.data.network
 import android.graphics.Bitmap
 import android.util.Log
 import com.fitghost.app.data.model.*
-import com.fitghost.app.utils.ApiKeyManager
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.Content
-import com.google.ai.client.generativeai.type.content
-import com.google.ai.client.generativeai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -47,30 +42,6 @@ class GeminiFashionService {
         // 응답 설정
         private const val MAX_OUTPUT_TOKENS = 512
         private const val TEMPERATURE = 0.7f
-    }
-
-    // 텍스트 전용 모델
-    private val textModel by lazy {
-        GenerativeModel(
-            modelName = TEXT_MODEL,
-            apiKey = ApiKeyManager.requireGeminiApiKey(),
-            generationConfig = generationConfig {
-                temperature = TEMPERATURE
-                maxOutputTokens = MAX_OUTPUT_TOKENS
-            }
-        )
-    }
-    
-    // 이미지 생성 모델
-    private val imageModel by lazy {
-        GenerativeModel(
-            modelName = IMAGE_MODEL,
-            apiKey = ApiKeyManager.requireGeminiApiKey(),
-            generationConfig = generationConfig {
-                temperature = TEMPERATURE
-                maxOutputTokens = MAX_OUTPUT_TOKENS
-            }
-        )
     }
 
     /**
@@ -167,7 +138,10 @@ class GeminiFashionService {
     ): Result<ByteArray> = withContext(Dispatchers.IO) {
         Log.d(TAG, "패션 이미지 생성 요청: $prompt")
         val enhancedPrompt = buildImageGenerationPrompt(prompt, context)
-        val apiKey = ApiKeyManager.requireGeminiApiKey()
+        val proxyBase = com.fitghost.app.BuildConfig.PROXY_BASE_URL.trim()
+        require(proxyBase.isNotBlank()) {
+            "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 먼저 구성해주세요."
+        }
         try {
             val body = JSONObject()
                 .put("contents", JSONArray().put(
@@ -179,7 +153,8 @@ class GeminiFashionService {
                     .put("temperature", TEMPERATURE)
                     .put("candidateCount", 1)
                 )
-            val url = "https://generativelanguage.googleapis.com/v1beta/models/$IMAGE_MODEL:generateContent?key=$apiKey"
+            val url =
+                proxyBase.trimEnd('/') + "/proxy/gemini/generateContent?model=$IMAGE_MODEL"
             val req = Request.Builder()
                 .url(url)
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
@@ -343,8 +318,12 @@ class GeminiFashionService {
         enhancedPrompt: String,
         maxTokens: Int = 512
     ): String {
-        val apiKey = ApiKeyManager.requireGeminiApiKey()
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$TEXT_MODEL:generateContent?key=$apiKey"
+        val proxyBase = com.fitghost.app.BuildConfig.PROXY_BASE_URL.trim()
+        require(proxyBase.isNotBlank()) {
+            "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 먼저 구성해주세요."
+        }
+        val url =
+            proxyBase.trimEnd('/') + "/proxy/gemini/generateContent?model=$TEXT_MODEL"
 
         var attempt = 0
         var tokens = maxTokens
@@ -401,7 +380,10 @@ class GeminiFashionService {
         context: NanoBananaContext? = null
     ): Result<ByteArray> = withContext(Dispatchers.IO) {
         Log.d(TAG, "패션 이미지 편집 요청: $prompt")
-        val apiKey = ApiKeyManager.requireGeminiApiKey()
+        val proxyBase = com.fitghost.app.BuildConfig.PROXY_BASE_URL.trim()
+        require(proxyBase.isNotBlank()) {
+            "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 먼저 구성해주세요."
+        }
         val enhancedPrompt = buildImageEditingPrompt(prompt, context)
         val bos = java.io.ByteArrayOutputStream()
         inputImage.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bos)
@@ -422,7 +404,8 @@ class GeminiFashionService {
                 .put("temperature", TEMPERATURE)
                 .put("candidateCount", 1)
             )
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$IMAGE_MODEL:generateContent?key=$apiKey"
+        val url =
+            proxyBase.trimEnd('/') + "/proxy/gemini/generateContent?model=$IMAGE_MODEL"
         try {
             val req = Request.Builder()
                 .url(url)

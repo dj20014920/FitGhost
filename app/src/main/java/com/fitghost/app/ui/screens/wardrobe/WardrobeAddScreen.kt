@@ -143,7 +143,18 @@ fun WardrobeAddScreen(
                 }
                 
                 // AI 분석
-                val result = autoComplete.analyzeClothingImage(bitmap)
+                val existing = WardrobeAutoComplete.ExistingFields(
+                    name = name,
+                    category = category,
+                    brand = brand,
+                    color = color,
+                    size = size,
+                    detailType = detailType,
+                    patternOrMaterial = pattern,
+                    tags = tagsRaw.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                    memo = description
+                )
+                val result = autoComplete.analyzeClothingImage(bitmap, existing)
                 
                 result.onSuccess { metadata ->
                     // 결과 적용

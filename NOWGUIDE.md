@@ -1,5 +1,126 @@
 # FitGhost - 가상 피팅 앱 📱✨
 
+## 🚨 빌드 주의: 무한 빌드/빌드 취소 방지
+
+다음 증상이 관찰될 경우(예: `:app:buildCMakeDebug[arm64-v8a]` 단계에서 한없이 오래 걸리거나 "Build cancelled"로 종료), 아래 지침을 반드시 따르세요.
+
+- 증상
+  - CMake 네이티브 단계가 비정상적으로 오래 지속되며 Gradle이 작업을 취소
+  - `ninja`가 `tools/*` 다수 바이너리와 Vulkan 파이프라인까지 빌드하면서 컴파일량 폭증
+
+- 근본 원인
+  - llama.cpp의 "도구 전체(TOOLS) + Vulkan"까지 통째로 빌드되어 불필요하게 방대한 컴파일·링크 수행 → 외부 네이티브 빌드가 장시간 점유 → Gradle 취소 발생
+
+- 적용된 기본 설정(이미 반영됨)
+  - CMake: 도구 전체 빌드 제거, 필요한 라이브러리(mtmd)만 직접 링크
+  - CMake: Vulkan 기본 비활성화(`GGML_VULKAN=OFF`)
+  - Gradle: 플래그로 선택 제어 가능
+    - `-PenableVulkan=true` 전달 시에만 Vulkan 활성화
+    - `-PabiFiltersOverride=arm64-v8a` 또는 `-PabiFiltersOverride=x86_64`로 단일 ABI만 빌드 가능(기본은 두 ABI)
+
+- 권장 빌드 명령(빠른 검증)
+  - 물리 ARM64 기기: 
+    - ``./gradlew :app:clean :app:assembleDebug -PabiFiltersOverride=arm64-v8a``
+  - 에뮬레이터(x86_64): 
+    - ``./gradlew :app:clean :app:assembleDebug -PabiFiltersOverride=x86_64``
+  - Vulkan이 꼭 필요한 경우(빌드량 증가 주의): 
+    - ``./gradlew :app:assembleDebug -PabiFiltersOverride=arm64-v8a -PenableVulkan=true``
+
+- 클린업 팁
+  - 네이티브 산출물이 꼬였을 때: ``./gradlew :app:externalNativeBuildClean`` 후 재시도
+  - 필요 시 `app/.cxx` 캐시 제거(시간이 더 들 수 있으므로 가급적 위 명령 우선)
+
+- 참고
+  - 로컬 `.work-llama/llama.cpp`가 존재하면 네트워크 Fetch 없이 빌드합니다. 없을 경우 Fetch가 일어나 빌드 시간이 늘 수 있습니다.
+  - 단일 ABI만 빌드하면 디버그 빌드 시간이 크게 줄어듭니다. 디바이스(또는 에뮬레이터) 아키텍처에 맞춰 선택하세요.
+
+
+## 🔁 NOWGUIDE 최신 동기화 (2025-10-22 - LiquidAI LFM2 전환 + Cloud-only 자동태깅 + 프록시 분기)
+
+### ✅ 핵심 변경 요약
+- 온디바이스 모델 전환: SmolVLM → LiquidAI LFM2-1.2B-Q4_0.gguf (텍스트 모델)
+  - 다운로드 경로: `MODEL_BASE_URL + "/models/LFM2-1.2B-Q4_0.gguf"`
+  - 기본 퍼블릭 베이스: `AiConfig.R2_PUBLIC_BASE` (로컬 설정이 있으면 우선 사용)
+  - mmproj 기본 비활성(빈 문자열). 온디바이스 태깅 경로는 사용하지 않음(PRD: 클라우드 고정)
+- 자동 태깅(옷장): Cloud-only(Gemini 2.5 Flash Lite)로 고정, 폴백 없음
+  - 신규 `ai/cloud/GeminiTagger.kt`: 스키마 강제 + 실패 시 1회 재시도 + 스키마 검증
+  - `WardrobeAutoComplete`는 클라우드만 호출(실패 시 에러 반환)
+- Gemini 호출 프록시 분기
+  - `PROXY_BASE_URL`이 설정되면 `.../proxy/gemini/generateContent`, `.../proxy/gemini/tag` 경유
+  - 설정이 비어있으면(개발 시) googleapis 직결(키 필요)
+- 장바구니 모델 확장
+  - `CartItem`에 `source(nav er|google)`와 `deeplink(url)` 필드 추가
+
+### 🔧 설정(local.properties 예시)
+```properties
+# 모델 CDN 루트(루트만, "/models" 포함하지 않음)
+MODEL_BASE_URL=https://cdn.emozleep.space
+
+# 프록시 베이스(배포 후 지정)
+PROXY_BASE_URL=https://fitghost-proxy.vinny4920-081.workers.dev
+```
+
+- Worker(Cloudflare) 환경 변수 예시
+  - `CDN_BASE=https://cdn.emozleep.space/models` (프리사인/리다이렉트 등에 사용)
+- Worker Secrets(Cloudflare) — wrangler CLI로 등록
+  ```bash
+  export CLOUDFLARE_API_TOKEN=<Custom API Token>
+  cd workers/proxy
+  ./node_modules/.bin/wrangler secret put GEMINI_API_KEY      # Google Gemini 2.5 Flash key
+  ./node_modules/.bin/wrangler secret put NAVER_CLIENT_ID     # Naver Search API Client ID
+  ./node_modules/.bin/wrangler secret put NAVER_CLIENT_SECRET # Naver Search API Client Secret
+  ./node_modules/.bin/wrangler secret put GOOGLE_CSE_KEY      # Google Programmable Search API key
+  ./node_modules/.bin/wrangler secret put GOOGLE_CSE_CX       # Programmable Search Engine ID
+  ```
+  - 현재 배포 중인 프로덕션 워커: `https://fitghost-proxy.vinny4920-081.workers.dev`
+  - 위 비밀 값이 모두 등록돼 있어야 앱이 Naver/Google 검색 프록시를 정상 호출한다.
+
+### 🗂️ 변경 파일(요약)
+- `app/src/main/java/com/fitghost/app/ai/ModelManager.kt`
+  - `MODEL_KEY=models/LFM2-1.2B-Q4_0.gguf`, `MODEL_FILENAME=LFM2-1.2B-Q4_0.gguf`, `CURRENT_MODEL_VERSION=lfm2-1.2b-q4_0`
+  - 다운로드 베이스: `BuildConfig.MODEL_BASE_URL` → 없으면 `AiConfig.R2_PUBLIC_BASE`
+  - mmproj 비활성(빈 문자열)
+- `app/src/main/java/com/fitghost/app/ai/AiConfig.kt`
+  - 퍼블릭 기본 베이스 주석/사용 가이드 보강
+- `app/build.gradle.kts`
+  - `buildConfigField`: `MODEL_BASE_URL`, `PROXY_BASE_URL` 추가
+- `app/src/main/java/com/fitghost/app/ai/cloud/GeminiTagger.kt` (신규)
+  - PRD 스키마 강제/검증/재시도 + 프록시 우선 경로
+- `app/src/main/java/com/fitghost/app/ai/WardrobeAutoComplete.kt`
+  - 클라우드 태깅만 호출(폴백 제거), 실패 시 에러 반환
+- `app/src/main/java/com/fitghost/app/engine/{CloudTryOnEngine,NanoBananaTryOnEngine}.kt`
+  - Gemini 엔드포인트 프록시 분기 추가
+- `app/src/main/java/com/fitghost/app/data/network/GeminiFashionService.kt`
+  - 텍스트/이미지 호출부 프록시 분기 추가
+- `app/src/main/java/com/fitghost/app/data/model/ShopModels.kt`
+  - `CartItem`에 `source`, `deeplink` 필드 추가
+
+### 🔍 다운로드/무결성 검증(샘플)
+```bash
+# CDN 퍼블릭
+curl -I https://cdn.emozleep.space/models/LFM2-1.2B-Q4_0.gguf
+# Content-Length: 695749568, ETag: "23df0e396b723d4c26f9f492865222b4"
+
+# pub-dev 퍼블릭(대안)
+curl -I https://pub-e73fdae760704a65b9c6b7aa4997907d.r2.dev/models/LFM2-1.2B-Q4_0.gguf
+
+# 로컬 다운로드 후 체크섬
+curl -L -o LFM2-1.2B-Q4_0.gguf https://cdn.emozleep.space/models/LFM2-1.2B-Q4_0.gguf
+md5 LFM2-1.2B-Q4_0.gguf   # 23df0e396b723d4c26f9f492865222b4
+```
+
+### 🧭 런타임 동작(요약)
+- Wardrobe 자동 태깅: 항상 클라우드 경로 사용(GeminiTagger → 프록시/직결)
+- 온디바이스 LFM2: 텍스트 모델로 유지되며, 자동 태깅 경로에는 사용하지 않음(PRD 준수)
+- Try-On 엔진: 기능 동일, 단 엔드포인트가 프록시 우선으로 변경됨
+
+### 📌 주의/이행 계획
+- 본 섹션 이후의 SmolVLM 관련 온디바이스 태깅/grammar 기반 안내는 **보관용**입니다. 실제 앱 동작은 본 섹션(PRD Cloud-only) 기준으로 동기화되었습니다.
+- 다음 단계(별도 작업):
+  - `domain/RecommendationService.kt`(클라우드 JSON 스키마 강제)
+  - `data/search/{NaverApi,GoogleCseApi}.kt` 병렬 통합 + ShopRepository 연동
+  - `domain/OutfitRecommender.kt` 규칙 기반(날씨/텍스트) + `HomeViewModel` 복원/연동
+
 ## 🔁 NOWGUIDE 최신 동기화 (2025-10-02 - 온디바이스 VLM JSON 응답 안정화)
 
 ### ✅ 현상 개선 확인
@@ -203,7 +324,7 @@ if (need < 0) {
 
 ### 🔄 사용자 흐름(요약)
 - [자동 완성 ✨] 탭 → 상태 확인
-  - 처음: 모델(782MB) + mmproj(190MB) 다운로드(프로그레스 표시) → 서버 자동 기동 → 분석 → 필드 자동 입력
+- 처음: 모델(696MB) 다운로드(프로그레스 표시) → 서버 자동 기동 → 분석 → 필드 자동 입력
   - 과거에 모델만 받았던 사용자: 버튼은 ‘AI 모델 다운로드’로 보이지만 실제로는 mmproj만 빠르게 다운로드 후 즉시 분석
 
 ### 📏 앱 용량 정책
@@ -246,7 +367,7 @@ if (need < 0) {
 ## 🔁 NOWGUIDE 최신 동기화 (2025-01-30 - 온디바이스 AI 추가)
 
 ### ⚡ 최신 업데이트: 온디바이스 AI 자동 완성 기능 추가
-- **SmolVLM 모델**: R2에서 782MB 다운로드, 완전 오프라인 작동
+- **LFM2 모델**: Cloudflare CDN을 통해 696MB 다운로드, 완전 오프라인 작동
 - **AI 시스템 정리**: Gemini 1.5 Flash 제거 → 2가지 AI만 존재
   1. **Gemini 2.5 Flash Image** (가상 피팅)
   2. **SmolVLM 온디바이스** (옷장 자동 완성)
@@ -1067,7 +1188,7 @@ implementation("io.github.ljcamargo:llamacpp-kotlin:0.1.0")
 
 // 모델 정보
 - 이름: SmolVLM-500M-Instruct-f16.gguf
-- 크기: 782 MB
+- 크기: 696 MB
 - 소스: Cloudflare R2 (ghostfit-models 버킷)
 ```
 
@@ -1095,8 +1216,8 @@ implementation("io.github.ljcamargo:llamacpp-kotlin:0.1.0")
 │  모델 미다운로드  │   모델 준비됨    │
 └──────────────────┴──────────────────┘
          ↓                    ↓
-    R2 다운로드          llama.cpp 추론
-    (782MB)              (온디바이스)
+    모델 다운로드       llama.cpp 추론
+    (696MB)             (온디바이스)
          ↓                    ↓
     DataStore 저장       JSON 파싱
          ↓                    ↓
@@ -1120,10 +1241,8 @@ class ModelManager private constructor(context: Context) {
         ERROR        // 오류
     }
     
-    // R2 설정
-    private const val R2_ENDPOINT = "https://081a9810680543ee912eb54ae15876a3.r2.cloudflarestorage.com"
-    private const val R2_BUCKET = "ghostfit-models"
-    private const val MODEL_KEY = "ghostfit_models/SmolVLM-500M-Instruct-f16.gguf"
+    // Cloudflare Workers 프록시 경유 다운로드
+    private const val MODEL_KEY = "models/LFM2-1.2B-Q4_0.gguf"
     
     // 주요 메서드
     suspend fun downloadModel(onProgress: (DownloadProgress) -> Unit): Result<String>
@@ -1133,7 +1252,7 @@ class ModelManager private constructor(context: Context) {
 ```
 
 **기능**:
-- ✅ R2에서 실제 782MB 모델 다운로드
+- ✅ Cloudflare CDN에서 696MB LFM2 모델 다운로드
 - ✅ 진행률 추적 (0-100%, 1% 단위)
 - ✅ 파일 검증 (크기 확인)
 - ✅ 재개 가능 (이미 다운로드된 경우 스킵)
@@ -1177,7 +1296,9 @@ data class ClothingMetadata(
 ### UI 플로우
 
 #### 첫 실행 (모델 다운로드)
+> Tip: 옷장 화면 상단에 노출되는 안내 카드에서도 [AI 모델 준비하기] 버튼으로 사전 다운로드를 시작할 수 있습니다.
 ```
+0. 옷장 탭 상단 배너에서 [AI 모델 준비하기] 선택 가능
 1. 사진 선택 → [자동 완성 ✨] 버튼 클릭
 2. 다이얼로그 표시:
    ┌─────────────────────────────────────────┐
@@ -1188,7 +1309,7 @@ data class ClothingMetadata(
    │                                         │
    │  📷 사진만 찍으면 자동으로 정보 입력     │
    │  ⚡ 빠르고 정확한 AI 분석                │
-   │  💾 약 782 MB (고품질 온디바이스 AI)    │
+   │  💾 약 696 MB (LiquidAI LFM2 온디바이스) │
    │  🔒 인터넷 불필요 (완전 오프라인)        │
    │                                         │
    │  [나중에]  [다운로드 시작]              │
@@ -1197,7 +1318,7 @@ data class ClothingMetadata(
    ┌─────────────────────────────────────────┐
    │  AI 모델 다운로드 중                     │
    │  ████████████░░░░░░░░░░░░  45%         │
-   │  352.9 MB / 782.0 MB                   │
+   │  352.9 MB / 696.0 MB                   │
    └─────────────────────────────────────────┘
 4. 완료 → 자동으로 분석 실행
 ```
@@ -1218,7 +1339,7 @@ data class ClothingMetadata(
 
 | 항목 | 수치 | 비고 |
 |------|------|------|
-| 모델 크기 | 782 MB | GGUF FP16 양자화 |
+| 모델 크기 | 696 MB | GGUF Q4_0 양자화 |
 | 다운로드 시간 | 30-60초 | Wi-Fi 기준 |
 | 첫 로드 시간 | 3-5초 | 메모리 로드 |
 | 추론 시간 | 5-15초 | 기기에 따라 다름 |
@@ -1343,7 +1464,7 @@ scope.launch {
 | **속도** | ~2-5초 | ~5-15초 |
 | **품질** | 매우 높음 | 높음 |
 | **오프라인** | ❌ 불가 | ✅ 가능 |
-| **용량** | 없음 | 782 MB |
+| **용량** | 없음 | 696 MB |
 
 **결론**: 두 AI 엔진은 서로 다른 목적으로 최적화되어 있으며, 함께 사용하여 최상의 사용자 경험을 제공합니다.
 
@@ -1359,7 +1480,7 @@ scope.launch {
 
 ### AI 시스템 구축
 - [x] **온디바이스 AI 통합**: llama.cpp Android 바인딩
-- [x] **R2 모델 다운로드**: 782MB SmolVLM 실제 다운로드
+- [x] **모델 다운로드**: 696MB LFM2 실제 다운로드
 - [x] **자동 완성 기능**: 옷장 아이템 AI 자동 완성
 - [x] **완전 오프라인**: 인터넷 없이 AI 사용 가능
 - [x] **프라이버시 보호**: 데이터 로컬 처리

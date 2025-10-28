@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.fitghost.app.BuildConfig
-import com.fitghost.app.utils.ApiKeyManager
 import com.fitghost.app.utils.GeminiApiHelper
 import com.fitghost.app.utils.ImageUtils
 import java.io.IOException
@@ -42,7 +41,10 @@ class CloudTryOnEngine(private val client: OkHttpClient = OkHttpClient()) : TryO
             systemPrompt: String?
     ): Bitmap =
             withContext(Dispatchers.IO) {
-                val apiKey = ApiKeyManager.requireGeminiVertexApiKey()
+                val proxyBase = BuildConfig.PROXY_BASE_URL.trim()
+                require(proxyBase.isNotBlank()) {
+                    "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 통해서만 호출할 수 있습니다."
+                }
 
                 // 1) 이미지 로드 및 변환 (과금 최적화: 해상도 제한)
                 val modelPng =
@@ -82,8 +84,8 @@ class CloudTryOnEngine(private val client: OkHttpClient = OkHttpClient()) : TryO
 
                 // 3) API 엔드포인트 및 요청 생성
                 val url =
-                        "https://generativelanguage.googleapis.com/v1beta/models/" +
-                                "gemini-2.5-flash-image-preview:generateContent?key=$apiKey"
+                        proxyBase.trimEnd('/') +
+                                "/proxy/gemini/generateContent?model=gemini-2.5-flash-image-preview"
 
                 val request = Request.Builder().url(url).post(body).build()
 

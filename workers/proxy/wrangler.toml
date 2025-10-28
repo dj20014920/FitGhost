@@ -1,0 +1,27 @@
+name = "fitghost-proxy"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+account_id = "081a9810680543ee912eb54ae15876a3"
+
+# Cloudflare account and routes can be set via env/flags at deploy time
+# account_id = "<your-account-id>"
+# route = { pattern = "emozleep-presign.vinny4920-081.workers.dev", custom_domain = false }
+
+[vars]
+# CDN root that hosts public model files (no trailing slash)
+CDN_BASE = "https://cdn.emozleep.space/models"
+# Comma-separated allowlist or "*". Android 앱은 일반적으로 CORS 제약이 약하지만 정책상 명시 유지
+ALLOWED_ORIGINS = "*"
+ALLOWED_FILES = "models/LFM2-1.2B-Q4_0.gguf"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "deepsleep-models"
+# preview_bucket_name may be omitted; wrangler will use the same bucket
+
+# Secrets to set (do NOT commit values):
+# wrangler secret put GEMINI_API_KEY
+# wrangler secret put NAVER_CLIENT_ID
+# wrangler secret put NAVER_CLIENT_SECRET
+# wrangler secret put GOOGLE_CSE_KEY
+# wrangler secret put GOOGLE_CSE_CX

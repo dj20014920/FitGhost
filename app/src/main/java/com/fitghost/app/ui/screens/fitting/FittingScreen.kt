@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import com.fitghost.app.data.CreditStore
 import com.fitghost.app.data.LocalImageStore
 import com.fitghost.app.data.db.WardrobeItemEntity
 import com.fitghost.app.engine.TryOnEngine
@@ -77,8 +76,6 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
             ) { uri -> uri?.let { clothingUris = clothingUris + it } }
 
     val engine: TryOnEngine = remember { CompositeTryOnEngine() }
-    val creditStore = remember { CreditStore(context) }
-    val activity = remember(context) { context as? android.app.Activity }
     // 정책: 추천/설명 텍스트 생성은 금지. 이미지 합성 지시문은 허용(기본 템플릿 적용됨).
 
     if (showPreviewDialog && lastSavedFile != null) {
@@ -223,32 +220,6 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                         isProcessing = isProcessing,
                         onRun = {
                             scope.launch {
-                                // 크레딧 차감
-                                val ok = creditStore.consumeOne()
-                                if (!ok) {
-                                    val res =
-                                            snackbarHostState.showSnackbar(
-                                                    message = "크레딧이 부족합니다.",
-                                                    actionLabel = "광고보고 +1"
-                                            )
-                                    if (res == SnackbarResult.ActionPerformed) {
-                                        activity?.let { act ->
-                                            val app = act.application as? com.fitghost.app.App
-                                            val controller = app?.rewardedAdController
-                                            if (controller != null) {
-                                                controller.showAd(
-                                                        activity = act,
-                                                        onReward = { _ ->
-                                                            // 광고 시청 리워드 지급 시 보너스 +1
-                                                            scope.launch {
-                                                                creditStore.addBonusOne()
-                                                            }
-                                                        }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
                                 if (modelUri != null && clothingUris.isNotEmpty()) {
                                     isProcessing = true
 
@@ -290,7 +261,7 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                                                         (e.message?.contains("Hostname", ignoreCase = true) == true &&
                                                          e.message?.contains("not verified", ignoreCase = true) == true) -> {
                                                     // 개발자 가이드 메시지(디버그 빌드 가정)
-                                                    "서버 TLS 인증서와 도메인이 일치하지 않습니다. local.properties에서 NANOBANANA_BASE_URL을 실제 배포 도메인(예: <app>.up.railway.app)으로 임시 지정하거나, 서버 인증서에 api.nanobanana.ai SAN을 추가하세요."
+                                                    "Cloudflare 프록시 TLS 구성이 올바른지 확인하세요. local.properties의 PROXY_BASE_URL이 실제 워커 도메인과 일치해야 합니다."
                                                 }
                                                 else -> "가상 피팅 생성에 실패했습니다: ${e.message}"
                                             }

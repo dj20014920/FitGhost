@@ -44,14 +44,15 @@ class NanoBananaTryOnEngine(private val client: OkHttpClient = createHttpClient(
             systemPrompt: String?
     ): Bitmap =
             withContext(Dispatchers.IO) {
-                val apiKey = BuildConfig.NANOBANANA_API_KEY.orEmpty()
-                require(apiKey.isNotBlank()) {
-                    "NANOBANANA_API_KEY is not set. Please provide Google AI API key in local.properties"
+                val proxyBase = BuildConfig.PROXY_BASE_URL.trim()
+                require(proxyBase.isNotBlank()) {
+                    "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 통해서만 호출할 수 있습니다."
                 }
 
-                // Google Gemini API 엔드포인트 (공식 문서 기준)
+                // 엔드포인트: Cloudflare Workers 프록시 우선, 없으면 Google 공식 엔드포인트
                 val apiUrl =
-                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
+                        proxyBase.trimEnd('/') +
+                                "/proxy/gemini/generateContent?model=gemini-2.5-flash-image-preview"
 
                 try {
                     // 1) 이미지 로드 및 변환 (과금 최적화: 해상도 제한)
@@ -101,7 +102,6 @@ class NanoBananaTryOnEngine(private val client: OkHttpClient = createHttpClient(
                     val request =
                             Request.Builder()
                                     .url(apiUrl)
-                                    .header("x-goog-api-key", apiKey)
                                     .header("Content-Type", "application/json")
                                     .post(
                                             requestBodyJson.toRequestBody(

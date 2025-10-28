@@ -4,7 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
-    id("kotlin-kapt")
+    // id("kotlin-kapt") // Migrate away from kapt to KSP where possible
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -27,44 +28,17 @@ android {
             localProperties.load(localPropertiesFile.inputStream())
         }
 
-        // Prefer local.properties, then Gradle property, then environment variable
-        val geminiKey =
-                (localProperties.getProperty("GEMINI_VERTEX_API_KEY")
-                        ?: (project.findProperty("GEMINI_VERTEX_API_KEY") as String?)
-                                ?: System.getenv("GEMINI_VERTEX_API_KEY") ?: "")
-        buildConfigField("String", "GEMINI_VERTEX_API_KEY", "\"$geminiKey\"")
+        // Optional: Model download base URL override (R2 public domain or CDN)
+        val modelBaseUrl = localProperties.getProperty("MODEL_BASE_URL", "")
+        buildConfigField("String", "MODEL_BASE_URL", "\"$modelBaseUrl\"")
 
-        // NanoBanana API Key (accept also 'nanobananaapikey' from local.properties)
-        val nanoBananaKey =
-                (localProperties.getProperty("NANOBANANA_API_KEY")
-                        ?: localProperties.getProperty("nanobananaapikey")
-                        ?: (project.findProperty("NANOBANANA_API_KEY") as String?)
-                                ?: System.getenv("NANOBANANA_API_KEY") ?: "")
-        buildConfigField("String", "NANOBANANA_API_KEY", "\"$nanoBananaKey\"")
-
-        // NanoBanana Base URL (configurable)
-        val nanoBananaBaseUrl =
-                (localProperties.getProperty("NANOBANANA_BASE_URL")
-                        ?: (project.findProperty("NANOBANANA_BASE_URL") as String?)
-                                ?: System.getenv("NANOBANANA_BASE_URL")
-                                ?: "https://api.nanobanana.ai/")
-        buildConfigField("String", "NANOBANANA_BASE_URL", "\"$nanoBananaBaseUrl\"")
-        // Optional: NanoBanana try-on endpoint path (e.g., "v1/tryon/compose")
-        val nanoBananaTryOnEndpoint = localProperties.getProperty("NANOBANANA_TRYON_ENDPOINT", "")
-        buildConfigField("String", "NANOBANANA_TRYON_ENDPOINT", "\"$nanoBananaTryOnEndpoint\"")
-        // Optional: request format hint ("json" | "multipart")
-        val nanoBananaTryOnFormat = localProperties.getProperty("NANOBANANA_TRYON_FORMAT", "json")
-        buildConfigField("String", "NANOBANANA_TRYON_FORMAT", "\"$nanoBananaTryOnFormat\"")
-        // Optional: auth header configuration
-        val nbAuthHeader = localProperties.getProperty("NANOBANANA_AUTH_HEADER", "Authorization")
-        val nbAuthScheme = localProperties.getProperty("NANOBANANA_AUTH_SCHEME", "Bearer")
-        buildConfigField("String", "NANOBANANA_AUTH_HEADER", "\"$nbAuthHeader\"")
-        buildConfigField("String", "NANOBANANA_AUTH_SCHEME", "\"$nbAuthScheme\"")
-
-        // Optional: send API key via query parameter instead of header
-        // Example: NANOBANANA_QUERY_KEY_PARAM=key  → appends ?key=<API_KEY>
-        val nbQueryKeyParam = localProperties.getProperty("NANOBANANA_QUERY_KEY_PARAM", "")
-        buildConfigField("String", "NANOBANANA_QUERY_KEY_PARAM", "\"$nbQueryKeyParam\"")
+        // Cloudflare Workers Proxy base (필수) - 기본값은 emoZleep production 워커
+        val proxyBaseUrl =
+                localProperties.getProperty(
+                        "PROXY_BASE_URL",
+                        "https://fitghost-proxy.vinny4920-081.workers.dev"
+                )
+        buildConfigField("String", "PROXY_BASE_URL", "\"$proxyBaseUrl\"")
 
         // Cloud Try-On (Gemini) opt-in flag
         val cloudTryOnEnabled =
@@ -128,16 +102,45 @@ android {
     }
 
     // NDK + CMake (임베드 서버)
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
+    if (project.findProperty("enableEmbeddedLlama") == "true") {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+            }
         }
     }
 
     defaultConfig {
         // 임베드 우선 arm64-v8a만 포함 (릴리즈 기준)
+        // 필요 시 -PabiFiltersOverride=arm64-v8a 또는 x86_64 등으로 단일 ABI 빌드 가능
+        val abiOverride = (project.findProperty("abiFiltersOverride") as String?)
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            // 에뮬레이터(x86_64)와 물리 ARM64 디바이스 모두 지원 (기본)
+            abiFilters.clear()
+            abiFilters += (abiOverride ?: listOf("arm64-v8a", "x86_64"))
+        }
+        // 빌드 시 플래그로 온디바이스 엔진 사용 여부를 명확히 주입
+        val embeddedEnabled = (project.findProperty("enableEmbeddedLlama") as String?) == "true"
+        buildConfigField("boolean", "ENABLE_EMBEDDED_LLAMA", embeddedEnabled.toString())
+
+        if (embeddedEnabled) {
+            externalNativeBuild {
+                cmake {
+                    // 필요시 오프라인/저속 네트워크 환경에서도 안전 빌드
+                    val enableVulkan = (project.findProperty("enableVulkan") as String?) == "true"
+                    val ggmlVulkanArg = "-DGGML_VULKAN=" + if (enableVulkan) "ON" else "OFF"
+                    arguments += listOf(
+                        ggmlVulkanArg,
+                        "-DLLAMA_BUILD_TOOLS=OFF",
+                        "-DLLAMA_BUILD_EXAMPLES=OFF",
+                        "-DLLAMA_CURL=OFF",
+                        "-DLLAMA_OPENSSL=OFF"
+                    )
+                }
+            }
         }
     }
 
@@ -151,6 +154,13 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+
+    // CMake / NDK 빌드 타임아웃 증가(대규모 서브프로젝트 Fetch 시 빌드 취소 방지)
+    // 주의: 일부 Gradle/AGP 조합에서 ExternalNativeBuildTask.timeout API와 java.time이 미노출일 수 있어 주석 처리
+    // 필요 시 gradle.properties로 제어하거나 CI에서 --max-workers 등으로 조정 권장
+    // tasks.withType<com.android.build.gradle.tasks.ExternalNativeBuildTask>().configureEach {
+    //     timeout.set(java.time.Duration.ofMinutes(30))
+    // }
 }
 
 dependencies {
@@ -180,7 +190,7 @@ dependencies {
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
 
     // Network

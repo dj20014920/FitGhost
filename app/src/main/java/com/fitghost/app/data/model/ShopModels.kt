@@ -41,6 +41,9 @@ data class CartItem(
     val productImageUrl: String,
     val shopName: String,
     val shopUrl: String,
+    // PRD: source(nav er|google) + deeplink(url) 필드 추가
+    val source: String = "", // "naver" | "google" | ""
+    val deeplink: String = "",
     val quantity: Int = 1,
     val addedAt: Long = System.currentTimeMillis()
 )
