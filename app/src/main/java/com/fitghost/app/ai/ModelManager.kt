@@ -200,19 +200,47 @@ class ModelManager private constructor(private val context: Context) {
                     }
                 }
 
-                // HTTP 클라이언트
+                // HTTP 클라이언트 - 커스텀 DNS로 에뮬레이터 DNS 문제 해결
                 val client = OkHttpClient.Builder()
                     .connectTimeout(java.time.Duration.ofSeconds(30))
                     .readTimeout(java.time.Duration.ofMinutes(30))
                     .writeTimeout(java.time.Duration.ofMinutes(30))
+                    .dns(object : okhttp3.Dns {
+                        override fun lookup(hostname: String): List<java.net.InetAddress> {
+                            return if (hostname == "cdn.emozleep.space") {
+                                // 안드로이드 에뮬레이터 DNS 문제 해결: 직접 IP 반환
+                                Log.d(TAG, "Custom DNS: $hostname -> ${AiConfig.CDN_IP_ADDRESS}")
+                                listOf(java.net.InetAddress.getByName(AiConfig.CDN_IP_ADDRESS))
+                            } else {
+                                // 다른 도메인은 시스템 DNS 사용
+                                okhttp3.Dns.SYSTEM.lookup(hostname)
+                            }
+                        }
+                    })
+                    .addInterceptor { chain ->
+                        val request = chain.request()
+                        Log.d(TAG, "HTTP Request: ${request.method} ${request.url}")
+                        try {
+                            val response = chain.proceed(request)
+                            Log.d(TAG, "HTTP Response: ${response.code} ${response.message}, Content-Length: ${response.body?.contentLength()}")
+                            response
+                        } catch (e: Exception) {
+                            Log.e(TAG, "HTTP Request failed: ${e.javaClass.simpleName}: ${e.message}", e)
+                            throw e
+                        }
+                    }
                     .build()
                 
                 if (!skipMainDownload) {
-                val primaryUrl = resolveDownloadUrl(client, MODEL_KEY)
-                    val request = Request.Builder().url(primaryUrl).build()
+                    val primaryUrl = resolveDownloadUrl(client, MODEL_KEY)
+                    val request = Request.Builder()
+                        .url(primaryUrl)
+                        .build()
                     Log.d(TAG, "Downloading main model from: $primaryUrl")
 
-                    client.newCall(request).execute().use { response ->
+                    try {
+                        client.newCall(request).execute().use { response ->
+                        Log.d(TAG, "Response code: ${response.code}, message: ${response.message}")
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code}: ${response.message}")
                         val body = response.body ?: throw Exception("Empty response body")
                         val totalBytesRaw = body.contentLength()
@@ -241,7 +269,15 @@ class ModelManager private constructor(private val context: Context) {
                             }
                         }
                         if (modelFile.exists()) modelFile.delete()
-                        tempFile.renameTo(modelFile)
+                        val renamed = tempFile.renameTo(modelFile)
+                        if (!renamed) {
+                            throw Exception("Failed to rename temp file to final model file")
+                        }
+                        Log.d(TAG, "Model download completed successfully: ${modelFile.absolutePath}")
+                    }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Download execution failed: ${e.javaClass.simpleName}: ${e.message}", e)
+                        throw e
                     }
                 } else {
                     // 메인 모델 스킵 시에도 진행률 UI가 멈춘 것처럼 보이지 않도록 100%로 보정
@@ -283,7 +319,8 @@ class ModelManager private constructor(private val context: Context) {
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Error during model download", e)
+                Log.e(TAG, "Error during model download: ${e.javaClass.simpleName}: ${e.message}", e)
+                e.printStackTrace()
                 updateModelState(ModelState.ERROR)
                 Result.failure(e)
             }
@@ -402,36 +439,10 @@ class ModelManager private constructor(private val context: Context) {
     private fun getLockFile(): File = File(getModelDirectory(), "$MODEL_FILENAME.lock")
 
     private fun resolveDownloadUrl(client: OkHttpClient, key: String): String {
-        val proxyBase = com.fitghost.app.BuildConfig.PROXY_BASE_URL.trim()
-        if (proxyBase.isNotBlank()) {
-            val presignUrl =
-                    proxyBase.trimEnd('/') +
-                            "/proxy/presign?key=" + URLEncoder.encode(key, StandardCharsets.UTF_8.name())
-            try {
-                client.newCall(Request.Builder().url(presignUrl).build()).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        Log.w(TAG, "Presign request failed: HTTP ${resp.code}")
-                    } else {
-                        val body = resp.body?.string()?.trim().orEmpty()
-                        if (body.isNotBlank()) {
-                            val json = JSONObject(body)
-                            val resolved = json.optString("url")
-                            if (resolved.isNotBlank()) {
-                                Log.d(TAG, "Resolved presigned CDN URL via proxy")
-                                return resolved
-                            }
-                        }
-                        Log.w(TAG, "Presign response missing url field")
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Presign request threw exception", t)
-            }
-        }
-        val base =
-                com.fitghost.app.BuildConfig.MODEL_BASE_URL.takeIf { it.isNotEmpty() }
-                        ?: AiConfig.R2_PUBLIC_BASE
-        return base.trimEnd('/') + "/" + key
+        // 도메인 이름 사용 (커스텀 DNS가 IP로 해결)
+        val directUrl = AiConfig.R2_PUBLIC_BASE.trimEnd('/') + "/" + key
+        Log.d(TAG, "Using CDN URL: $directUrl")
+        return directUrl
     }
 
     /**

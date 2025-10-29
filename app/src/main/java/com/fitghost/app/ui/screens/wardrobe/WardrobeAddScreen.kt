@@ -189,7 +189,7 @@ fun WardrobeAddScreen(
         // 다이얼로그는 즉시 닫고, 화면 내 버튼/카드에서 진행률만 표시
         showModelDownloadDialog = false
         scope.launch {
-            downloadProgress = ModelManager.DownloadProgress(0f, 1.5f, 0)
+            downloadProgress = ModelManager.DownloadProgress(0f, 696f, 0)
             
             val result = modelManager.downloadModel { progress ->
                 downloadProgress = progress

@@ -27,7 +27,6 @@ import com.fitghost.app.ui.theme.FitGhostColors
 import com.fitghost.app.util.LocationProvider
 import kotlinx.coroutines.launch
 
-/** 홈 화면 - 날씨 정보와 AI 추천 코디 표시 PRD: 홈 진입 시 오늘의 날씨 표시 + 추천 TOP3 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -37,6 +36,40 @@ fun HomeScreen(
         onNavigateToShop: () -> Unit = {},
         onNavigateToGallery: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val modelManager = remember { com.fitghost.app.ai.ModelManager.getInstance(context) }
+    val scope = rememberCoroutineScope()
+    var modelState by remember { mutableStateOf(com.fitghost.app.ai.ModelManager.ModelState.NOT_READY) }
+    var downloadProgress by remember { mutableStateOf<com.fitghost.app.ai.ModelManager.DownloadProgress?>(null) }
+
+    LaunchedEffect(Unit) {
+        val reconciled = modelManager.reconcileState()
+        modelState = reconciled
+        modelManager.observeModelState().collect { stateUpdate ->
+            modelState = stateUpdate
+        }
+    }
+
+    fun startModelDownload() {
+        if (downloadProgress != null || modelState == com.fitghost.app.ai.ModelManager.ModelState.DOWNLOADING) return
+        scope.launch {
+            downloadProgress = com.fitghost.app.ai.ModelManager.DownloadProgress(0f, 696f, 0)
+            val result = modelManager.downloadModel { progress ->
+                downloadProgress = progress
+            }
+            result.onSuccess {
+                downloadProgress = null
+                android.widget.Toast.makeText(context, "AI 모델이 준비되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+            }.onFailure { error ->
+                downloadProgress = null
+                android.widget.Toast.makeText(
+                        context,
+                        "다운로드 실패: ${error.message ?: "알 수 없는 오류"}",
+                        android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize().background(FitGhostColors.BgPrimary)) {
         // Header
@@ -70,6 +103,13 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item { WeatherCard() }
+            item { 
+                ModelDownloadBanner(
+                    modelState = modelState,
+                    downloadProgress = downloadProgress,
+                    onDownload = { startModelDownload() }
+                )
+            }
             item { OutfitRecommendationSection() }
         }
     }
@@ -234,6 +274,174 @@ private fun OutfitRecommendationCard(index: Int) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = FitGhostColors.TextSecondary
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelDownloadBanner(
+        modelState: com.fitghost.app.ai.ModelManager.ModelState,
+        downloadProgress: com.fitghost.app.ai.ModelManager.DownloadProgress?,
+        onDownload: () -> Unit
+) {
+    val cardModifier = Modifier.fillMaxWidth()
+
+    when {
+        downloadProgress != null || modelState == com.fitghost.app.ai.ModelManager.ModelState.DOWNLOADING -> {
+            Card(
+                    modifier = cardModifier.softClay(),
+                    colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+                    shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                            text = "AI 자동 완성 모델 준비 중",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = FitGhostColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    val progress = downloadProgress
+                    if (progress != null) {
+                        val downloadedText = String.format("%.1f", progress.downloadedMB)
+                        val totalText =
+                                if (progress.totalMB > 0) String.format("%.1f", progress.totalMB)
+                                else null
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                    text = "${progress.percentage}%",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FitGhostColors.AccentPrimary
+                            )
+                            Text(
+                                    text =
+                                    if (totalText != null) "$downloadedText MB / $totalText MB"
+                                    else "$downloadedText MB 다운로드 중",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = FitGhostColors.TextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                                progress = { progress.percentage / 100f },
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                color = FitGhostColors.AccentPrimary
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                color = FitGhostColors.AccentPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                            text = "다운로드가 끝나면 자동 완성을 바로 이용할 수 있습니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = FitGhostColors.TextSecondary
+                    )
+                }
+            }
+        }
+        modelState == com.fitghost.app.ai.ModelManager.ModelState.READY -> {
+            Card(
+                    modifier = cardModifier.softClay(),
+                    colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+                    shape = RoundedCornerShape(24.dp)
+            ) {
+                Row(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = FitGhostColors.AccentPrimary,
+                            modifier = Modifier.size(32.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                                text = "AI 자동 완성 준비 완료",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = FitGhostColors.TextPrimary
+                        )
+                        Text(
+                                text = "사진을 추가하면 AI가 이름과 속성을 자동 채워줍니다.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = FitGhostColors.TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+        else -> {
+            Card(
+                    modifier = cardModifier.softClay(),
+                    colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+                    shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                                imageVector = Icons.Outlined.Download,
+                                contentDescription = null,
+                                tint = FitGhostColors.AccentPrimary,
+                                modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                                text = "AI 자동 완성 모델 다운로드",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = FitGhostColors.TextPrimary
+                        )
+                    }
+                    Text(
+                            text = "한 번만 받아두면 네트워크가 느린 환경에서도 빠르게 자동 완성을 사용할 수 있어요.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = FitGhostColors.TextSecondary
+                    )
+                    FilledTonalButton(
+                            onClick = onDownload,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.15f),
+                                    contentColor = FitGhostColors.AccentPrimary
+                            ),
+                            shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Outlined.Download, contentDescription = null)
+                            Text(
+                                    text = "AI 모델 준비하기",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
