@@ -126,6 +126,26 @@ class GeminiFashionService {
     }
 
     /**
+     * 매칭 카테고리 JSON 생성 (MatchingItemsGenerator 클라우드 폴백)
+     */
+    suspend fun generateMatchingCategories(
+        prompt: String
+    ): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val enhancedPrompt = buildMatchingCategoriesPrompt(prompt)
+            val text = generateTextViaRest(enhancedPrompt, maxTokens = 192)
+            val items = parseMatchingCategories(text)
+            if (items.isEmpty()) {
+                throw IllegalStateException("No matching_items parsed from response")
+            }
+            Result.success(items)
+        } catch (e: Exception) {
+            Log.e(TAG, "generateMatchingCategories failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 이미지 생성 요청 (Nano Banana 기능)
      * 
      * @param prompt 이미지 생성 프롬프트
@@ -310,6 +330,39 @@ class GeminiFashionService {
         신뢰도: [90-95]%
         """.trimIndent()
         return "$systemPrompt\n\n매칭 요청: $prompt"
+    }
+
+    private fun buildMatchingCategoriesPrompt(prompt: String): String {
+        return """
+당신은 대한민국 패션 코디 전문가입니다. 아래 정보를 분석해 어울리는 패션 아이템 검색어를 제안하세요.
+
+입력:
+$prompt
+
+규칙:
+- 항상 JSON 객체 하나만 반환합니다.
+- 형식: {"matching_items": ["검색어1", "검색어2", "검색어3", "검색어4", "검색어5"]}
+- 색상 + 아이템 형태로 구체적으로 작성합니다. (예: "화이트 셔츠")
+- 입력 아이템과 동일한 카테고리는 피하고, 상보적인 아이템 위주로 제안합니다.
+- 한글을 사용하며, 불필요한 설명이나 마크다운을 포함하지 않습니다.
+""".trimIndent()
+    }
+
+    private fun parseMatchingCategories(raw: String): List<String> {
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        if (start == -1 || end <= start) return emptyList()
+        val json = raw.substring(start, end + 1)
+        val obj = JSONObject(json)
+        val arr = obj.optJSONArray("matching_items") ?: return emptyList()
+        val items = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val value = arr.optString(i).trim()
+            if (value.isNotEmpty()) {
+                items.add(value)
+            }
+        }
+        return items
     }
 
     // ============= 텍스트 생성(REST 단일화) =============

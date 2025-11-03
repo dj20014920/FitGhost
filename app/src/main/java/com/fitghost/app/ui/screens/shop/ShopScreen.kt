@@ -20,6 +20,12 @@ import com.fitghost.app.ui.theme.FitGhostColors
 import com.fitghost.app.data.repository.CartRepositoryProvider
 import com.fitghost.app.data.model.FashionRecommendation
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.BitmapFactory
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,6 +34,7 @@ fun ShopScreen(
         modifier: Modifier = Modifier,
         viewModel: ShopViewModel = viewModel(factory = ShopViewModelFactory())
 ) {
+    val context = LocalContext.current
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
@@ -38,9 +45,31 @@ fun ShopScreen(
     // AI 추천 상태
     val aiRecommendations by viewModel.aiRecommendations.collectAsStateWithLifecycle()
     val isAiLoading by viewModel.isAiLoading.collectAsStateWithLifecycle()
+    
+    // 이미지 검색 상태
+    val imageSearchResult by viewModel.imageSearchResult.collectAsStateWithLifecycle()
+    val isImageSearching by viewModel.isImageSearching.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    
+    // 이미지 선택 런처
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                viewModel.searchByImage(bitmap)
+            } catch (e: Exception) {
+                scope.launch {
+                    snackbarHostState.showSnackbar("이미지를 불러올 수 없습니다")
+                }
+            }
+        }
+    }
 
     // UI 탭 상태: 검색/추천/AI추천/위시리스트
     var selectedTab by remember { mutableStateOf(0) }
@@ -82,8 +111,22 @@ fun ShopScreen(
                 SearchSection(
                         query = searchQuery,
                         onQueryChange = viewModel::updateSearchQuery,
+                        onImageSearchClick = {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
                         modifier = Modifier.padding(16.dp)
                 )
+                
+                // 이미지 검색 결과 미리보기
+                imageSearchResult?.let { result ->
+                    ImageSearchPreview(
+                        result = result,
+                        onClear = viewModel::clearImageSearch,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
 
             // 탭
@@ -103,8 +146,12 @@ fun ShopScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (isLoading) {
-                    item { LoadingSection() }
+                if (isLoading || isImageSearching) {
+                    item { 
+                        LoadingSection(
+                            message = if (isImageSearching) "이미지를 분석하고 있어요..." else null
+                        )
+                    }
                 } else {
                     when (selectedTab) {
                         0 -> {
@@ -118,7 +165,7 @@ fun ShopScreen(
                                                 product = product,
                                                 onAddToCart = { viewModel.addToCart(product) },
                                                 onToggleWishlist = {
-                                                    viewModel.toggleWishlist(product.id, product.isWishlisted)
+                                                    viewModel.toggleWishlist(product)
                                                 }
                                         )
                                     }
@@ -142,7 +189,7 @@ fun ShopScreen(
                                         recommendation = recommendation,
                                         onAddToCart = { viewModel.addToCart(it) },
                                         onToggleWishlist = { product ->
-                                            viewModel.toggleWishlist(product.id, product.isWishlisted)
+                                            viewModel.toggleWishlist(product)
                                         }
                                 )
                             }
@@ -205,7 +252,7 @@ fun ShopScreen(
                                             product = product,
                                             onAddToCart = { viewModel.addToCart(product) },
                                             onToggleWishlist = {
-                                                viewModel.toggleWishlist(product.id, product.isWishlisted)
+                                                viewModel.toggleWishlist(product)
                                             }
                                     )
                                 }
@@ -222,16 +269,139 @@ fun ShopScreen(
 private fun SearchSection(
         query: String,
         onQueryChange: (String) -> Unit,
+        onImageSearchClick: () -> Unit,
         modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("상품명, 태그로 검색") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) }
+            )
+            
+            // 이미지 검색 버튼
+            IconButton(
+                onClick = onImageSearchClick,
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(
+                        color = FitGhostColors.AccentPrimary,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CameraAlt,
+                    contentDescription = "사진으로 검색",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageSearchPreview(
+    result: com.fitghost.app.data.repository.ImageSearchResult,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = FitGhostColors.BgSecondary
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("상품명, 태그로 검색") },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) }
-        )
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = FitGhostColors.AccentPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = result.sourceImage ?: "이미지 검색",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = FitGhostColors.TextPrimary
+                    )
+                }
+                IconButton(onClick = onClear) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "검색 초기화",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            if (result.matchingCategories.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "어울리는 아이템",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FitGhostColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    result.matchingCategories.take(4).forEach { category ->
+                        Surface(
+                            color = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = FitGhostColors.AccentPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingSection(message: String? = null) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CircularProgressIndicator()
+            if (message != null) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary
+                )
+            }
+        }
     }
 }
 

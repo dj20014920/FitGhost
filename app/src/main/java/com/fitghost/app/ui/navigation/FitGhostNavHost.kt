@@ -51,6 +51,14 @@ fun FitGhostNavHost(navController: NavHostController, modifier: Modifier = Modif
             WardrobeScreenImpl(
                     onNavigateToAdd = {
                         navController.navigate(FitGhostDestination.WardrobeAdd.route)
+                    },
+                    onNavigateToShop = { itemDescription, itemCategory ->
+                        // 옷장 아이템 기반 검색 파라미터 설정
+                        com.fitghost.app.ui.screens.shop.ShopViewModel.setPendingSearch(
+                            itemDescription, itemCategory
+                        )
+                        // Shop 화면으로 이동
+                        navController.navigate(FitGhostDestination.Shop.route)
                     }
             )
         }

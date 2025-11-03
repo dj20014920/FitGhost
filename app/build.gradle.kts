@@ -69,14 +69,6 @@ android {
                 ?: System.getenv("ALLOW_INSECURE_TLS") ?: "false").toString()
         buildConfigField("boolean", "ALLOW_INSECURE_TLS", allowInsecureTls)
 
-        // AdMob App ID injected as string resource for all build types
-        val admobAppId =
-                localProperties.getProperty(
-                        "ADMOB_APP_ID",
-                        "ca-app-pub-3940256099942544~3347511713" // Google sample App ID (safe
-                        // fallback)
-                        )
-        resValue("string", "admob_app_id", "\"$admobAppId\"")
     }
 
     buildTypes {
@@ -86,13 +78,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Safety: never unlimited in release builds
-            buildConfigField("boolean", "UNLIMITED_CREDITS", "false")
         }
         debug {
             applicationIdSuffix = ".debug"
-            // Dev-only: make in-app credits unlimited in debug builds
-            buildConfigField("boolean", "UNLIMITED_CREDITS", "true")
         }
     }
 
@@ -196,6 +184,7 @@ dependencies {
     // Network
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     
@@ -207,10 +196,6 @@ dependencies {
 
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
-
-    // Ads & UMP
-    implementation("com.google.android.gms:play-services-ads:23.3.0")
-    implementation("com.google.android.ump:user-messaging-platform:3.0.0")
 
     // Device
     implementation("androidx.window:window:1.3.0")

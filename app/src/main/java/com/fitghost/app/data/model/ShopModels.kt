@@ -2,7 +2,7 @@ package com.fitghost.app.data.model
 
 /**
  * 상품 정보 모델
- * PRD: 네이버/구글 검색 API 연동 대비 설계
+ * 네이버/구글 검색 API 연동 완료
  */
 data class Product(
     val id: String,
@@ -14,7 +14,8 @@ data class Product(
     val shopUrl: String,
     val description: String = "",
     val tags: List<String> = emptyList(),
-    val isWishlisted: Boolean = false
+    val isWishlisted: Boolean = false,
+    val source: String = "" // "naver" | "google" | ""
 )
 
 /**

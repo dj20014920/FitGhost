@@ -30,7 +30,10 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 /** 옷장 메인 화면 PRD: Wardrobe CRUD + 필터 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WardrobeScreen(onNavigateToAdd: () -> Unit = {}) {
+fun WardrobeScreen(
+    onNavigateToAdd: () -> Unit = {},
+    onNavigateToShop: (itemDescription: String, itemCategory: String) -> Unit = { _, _ -> }
+) {
     val context = LocalContext.current
     val viewModel: WardrobeViewModel = viewModel(factory = WardrobeViewModelFactory(context))
     val state by viewModel.uiState.collectAsState()
@@ -127,7 +130,12 @@ fun WardrobeScreen(onNavigateToAdd: () -> Unit = {}) {
                             item = item,
                             onToggleFavorite = { viewModel.setFavorite(item.id, !item.favorite) },
                             onDelete = { viewModel.delete(item) },
-                            onClick = { /* 편집 네비게이션 연결용 콜백 확장 예정 */ }
+                            onClick = { /* 편집 네비게이션 연결용 콜백 확장 예정 */ },
+                            onFindSimilar = {
+                                val description = "${item.color} ${item.name}".trim()
+                                val category = categoryLabel(item.category)
+                                onNavigateToShop(description, category)
+                            }
                     )
                 }
             }
@@ -192,7 +200,8 @@ private fun WardrobeItemRow(
         item: WardrobeItemEntity,
         onToggleFavorite: () -> Unit,
         onDelete: () -> Unit,
-        onClick: () -> Unit
+        onClick: () -> Unit,
+        onFindSimilar: () -> Unit
 ) {
     Card(
             modifier = Modifier.fillMaxWidth().softClayInset(),
@@ -200,82 +209,100 @@ private fun WardrobeItemRow(
             shape = RoundedCornerShape(16.dp),
             onClick = onClick
     ) {
-        Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // 썸네일 + 텍스트 영역 레이아웃 (왼쪽 이미지, 오른쪽 텍스트)
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 썸네일 박스
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(FitGhostColors.BgGlass),
-                    contentAlignment = Alignment.Center
+                // 썸네일 + 텍스트 영역 레이아웃 (왼쪽 이미지, 오른쪽 텍스트)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    val uri = item.imageUri
-                    if (!uri.isNullOrBlank()) {
-                        AsyncImage(
-                            model = uri,
-                            contentDescription = "아이템 썸네일",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            placeholder = rememberVectorPainter(image = Icons.Outlined.Image),
-                            error = rememberVectorPainter(image = Icons.Outlined.BrokenImage)
+                    // 썸네일 박스
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(FitGhostColors.BgGlass),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val uri = item.imageUri
+                        if (!uri.isNullOrBlank()) {
+                            AsyncImage(
+                                model = uri,
+                                contentDescription = "아이템 썸네일",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                placeholder = rememberVectorPainter(image = Icons.Outlined.Image),
+                                error = rememberVectorPainter(image = Icons.Outlined.BrokenImage)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Checkroom,
+                                contentDescription = null,
+                                tint = FitGhostColors.TextTertiary
+                            )
+                        }
+                    }
+
+                    // 텍스트 정보
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                                text = item.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = FitGhostColors.TextPrimary,
+                                fontWeight = FontWeight.Bold
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.Checkroom,
-                            contentDescription = null,
-                            tint = FitGhostColors.TextTertiary
-                        )
+                        val meta =
+                                listOfNotNull(item.brand, item.color, item.size).filter { it.isNotBlank() }
+                        if (meta.isNotEmpty()) {
+                            Text(
+                                    text = meta.joinToString(" • "),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = FitGhostColors.TextSecondary
+                            )
+                        }
                     }
                 }
 
-                // 텍스트 정보
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                            text = item.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = FitGhostColors.TextPrimary,
-                            fontWeight = FontWeight.Bold
-                    )
-                    val meta =
-                            listOfNotNull(item.brand, item.color, item.size).filter { it.isNotBlank() }
-                    if (meta.isNotEmpty()) {
-                        Text(
-                                text = meta.joinToString(" • "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = FitGhostColors.TextSecondary
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                                imageVector =
+                                        if (item.favorite) Icons.Outlined.Favorite
+                                        else Icons.Outlined.FavoriteBorder,
+                                contentDescription = "즐겨찾기 토글"
                         )
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(imageVector = Icons.Outlined.DeleteOutline, contentDescription = "삭제")
                     }
                 }
             }
-
-            Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            
+            // 유사 상품 찾기 버튼
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onFindSimilar,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                            imageVector =
-                                    if (item.favorite) Icons.Outlined.Favorite
-                                    else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "즐겨찾기 토글"
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(imageVector = Icons.Outlined.DeleteOutline, contentDescription = "삭제")
-                }
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("유사 상품 찾기")
             }
         }
     }

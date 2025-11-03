@@ -12,13 +12,20 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
 /**
- * Cloud Auto-Tagging via Gemini 2.5 Flash Lite (PRD 10.1)
+ * Cloud Auto-Tagging via Gemini 2.5 Flash-Lite (PRD 10.1)
+ * - 멀티모달 지원: 텍스트, 이미지, 동영상, 오디오, PDF
+ * - 입력: 1,048,576 토큰 / 출력: 65,536 토큰
+ * - 함수 호출, 구조화된 출력, 캐싱 지원
+ * - 지식 단절: 2025년 1월 / 최신 업데이트: 2025년 7월
  * - JSON 스키마 강제 + 실패 시 최대 2회 재시도
- * - Cloudflare 프록시(BuildConfig.PROXY_BASE_URL) 경유 필수, 직결 경로 제거
+ * - Cloudflare 프록시(BuildConfig.PROXY_BASE_URL) 경유 필수
  */
 object GeminiTagger {
     private const val TAG = "GeminiTagger"
+    // Gemini 2.5 Flash-Lite (안정화 버전)
     private const val MODEL = "gemini-2.5-flash-lite"
+    private const val CATEGORY_CONF_THRESHOLD = 0.55
+    private const val DETAIL_CONF_THRESHOLD = 0.45
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(java.time.Duration.ofSeconds(30))
@@ -47,26 +54,50 @@ object GeminiTagger {
     fun toClothingMetadata(json: JSONObject): WardrobeAutoComplete.ClothingMetadata {
         val catTop = json.optString("category_top", "")
         val attributes = json.optJSONObject("attributes")
-        val color = attributes?.optString("color_primary", "") ?: ""
         val sub = json.optString("category_sub", "")
-        val pattern = attributes?.optString("pattern_basic", "") ?: ""
-        return WardrobeAutoComplete.ClothingMetadata(
-            category = when (catTop.lowercase()) {
-                "상의","top" -> "TOP"
-                "하의","bottom" -> "BOTTOM"
-                "아우터","outer" -> "OUTER"
-                "신발","shoes" -> "SHOES"
-                "악세서리","accessory" -> "ACCESSORY"
-                else -> "OTHER"
-            },
-            name = "",
-            color = color,
-            detailType = sub,
-            pattern = pattern,
+        val colorPrimary = attributes?.optString("color_primary", "") ?: ""
+        val colorSecondary = attributes?.optString("color_secondary", "") ?: ""
+        val patternRaw = attributes?.optString("pattern_basic", "") ?: ""
+        val fabricRaw = attributes?.optString("fabric_basic", "") ?: ""
+        val confidence = json.optJSONObject("confidence")
+        val topConfidence = confidence?.optDouble("top", Double.NaN)?.takeIf { !it.isNaN() }
+        val subConfidence = confidence?.optDouble("sub", Double.NaN)?.takeIf { !it.isNaN() }
+
+        val normalizedCategory = normalizeCategory(catTop, topConfidence)
+        val normalizedDetail = normalizeDetail(sub, subConfidence)
+        val normalizedColorPrimary = normalizeColor(colorPrimary)
+        val normalizedColor = if (normalizedColorPrimary.isNotBlank()) {
+            normalizedColorPrimary
+        } else {
+            normalizeColor(colorSecondary)
+        }
+        val normalizedPattern = normalizePattern(patternRaw, fabricRaw)
+        val displayName = buildDisplayName(normalizedColor, normalizedPattern, normalizedDetail)
+        val tags = buildTags(
+            normalizedCategory,
+            normalizedDetail,
+            normalizedColor,
+            normalizedPattern,
+            colorPrimary,
+            patternRaw,
+            fabricRaw
+        )
+
+        val metadata = WardrobeAutoComplete.ClothingMetadata(
+            category = normalizedCategory,
+            name = displayName,
+            color = normalizedColor,
+            detailType = normalizedDetail,
+            pattern = normalizedPattern,
             brand = "",
-            tags = emptyList(),
+            tags = tags,
             description = ""
         )
+        Log.d(
+            TAG,
+            "Mapped Gemini wardrobe JSON (top='$catTop', sub='$sub', color='$colorPrimary/$colorSecondary', pattern='$patternRaw', fabric='$fabricRaw', conf=${topConfidence ?: "?"}/${subConfidence ?: "?"}) -> $metadata"
+        )
+        return metadata
     }
 
     // ---- internal ----
@@ -76,15 +107,54 @@ object GeminiTagger {
         val userPrompt = buildUserPrompt(strict)
         val body = buildRestBody(userPrompt, png)
         val url = resolveEndpoint()
+        
+        // 디버깅을 위한 상세 로깅
+        Log.d(TAG, "=== Gemini API Request ===")
+        Log.d(TAG, "Target URL: $url")
+        Log.d(TAG, "Model: $MODEL")
+        Log.d(TAG, "Proxy Base: ${BuildConfig.PROXY_BASE_URL}")
+        Log.d(TAG, "Payload (sanitized): ${sanitizePayloadForLog(body, png.length)}")
 
         val reqBuilder = Request.Builder().url(url)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
 
         client.newCall(reqBuilder.build()).execute().use { resp ->
-            if (!resp.isSuccessful) error("HTTP ${resp.code}")
-            val txt = resp.body?.string() ?: error("Empty body")
-            // 응답에서 텍스트를 추출(모델이 JSON-only로 따랐다면 최상위에 JSON)
-            return extractJsonObject(txt)
+            val txt = resp.body?.string().orEmpty()
+            Log.d(TAG, "Response HTTP ${resp.code}")
+            
+            if (!resp.isSuccessful) {
+                val errorMessage = extractErrorMessage(txt)
+                Log.e(TAG, "=== Gemini API Error ===")
+                Log.e(TAG, "HTTP Code: ${resp.code}")
+                Log.e(TAG, "Error Body: $errorMessage")
+                Log.e(TAG, "Requested URL: $url")
+                
+                // API 키 문제 진단
+                if (errorMessage.contains("API key not valid", ignoreCase = true)) {
+                    throw IllegalStateException(
+                        "Gemini API 키가 유효하지 않습니다. Cloudflare Workers의 GEMINI_API_KEY 시크릿을 확인하세요.\n" +
+                        "Google AI Studio (aistudio.google.com)에서 새 API 키를 발급받으세요.\n" +
+                        "Error: $errorMessage"
+                    )
+                }
+                
+                // 지역 제한 문제 진단
+                if (errorMessage.contains("location is not supported", ignoreCase = true)) {
+                    throw IllegalStateException(
+                        "Gemini API 지역 제한 문제입니다.\n" +
+                        "1. Google AI Studio에서 발급받은 API 키인지 확인\n" +
+                        "2. API 키에 올바른 권한이 있는지 확인\n" +
+                        "3. Cloudflare Workers에 올바른 키가 설정되어 있는지 확인\n" +
+                        "Error: $errorMessage"
+                    )
+                }
+                
+                throw IllegalStateException("Gemini 태깅 실패 (${resp.code}): $errorMessage")
+            }
+            
+            val parsed = extractJsonObject(txt)
+            Log.d(TAG, "Response JSON: $parsed")
+            return parsed
         }
     }
 
@@ -117,6 +187,20 @@ object GeminiTagger {
             .put("contents", org.json.JSONArray()
                 .put(org.json.JSONObject().put("role", "user").put("parts", parts)))
             .put("generationConfig", org.json.JSONObject().put("temperature", 0.1).put("candidateCount", 1))
+    }
+    
+    private fun sanitizePayloadForLog(body: JSONObject, base64Length: Int): JSONObject {
+        val clone = JSONObject(body.toString())
+        val contents = clone.optJSONArray("contents")
+        for (i in 0 until (contents?.length() ?: 0)) {
+            val parts = contents!!.optJSONObject(i)?.optJSONArray("parts") ?: continue
+            for (j in 0 until parts.length()) {
+                val part = parts.optJSONObject(j) ?: continue
+                val inline = part.optJSONObject("inline_data") ?: continue
+                inline.put("data", "<omitted:$base64Length chars>")
+            }
+        }
+        return clone
     }
 
     private fun toPngBase64(bmp: Bitmap): String {
@@ -151,6 +235,131 @@ object GeminiTagger {
         }.getOrElse { throw it }
     }
 
+    private fun normalizeCategory(raw: String?, confidence: Double?): String {
+        val key = raw.orEmpty().trim().lowercase()
+        if (key.isBlank()) return ""
+        val mapped = when (key) {
+            "상의", "top" -> "TOP"
+            "하의", "bottom" -> "BOTTOM"
+            "아우터", "outer", "outerwear" -> "OUTER"
+            "신발", "shoes", "footwear" -> "SHOES"
+            "악세서리", "액세서리", "accessory", "accessories" -> "ACCESSORY"
+            "기타", "other" -> "OTHER"
+            else -> ""
+        }
+        if (mapped.isBlank()) return ""
+        return if (confidence == null || confidence >= CATEGORY_CONF_THRESHOLD) mapped else ""
+    }
+
+    private fun normalizeDetail(raw: String?, confidence: Double?): String {
+        val key = raw.orEmpty().trim().lowercase()
+        if (key.isBlank()) return ""
+        val mapped = when {
+            key in setOf("tshirt", "t-shirt", "티셔츠", "tee") -> "티셔츠"
+            key in setOf("shirt", "셔츠", "button-down", "button up") -> "셔츠"
+            key in setOf("hoodie", "후드티", "hooded sweatshirt") -> "후드티"
+            key in setOf("sweater", "knitwear", "knit", "pullover") -> "스웨터"
+            key in setOf("cardigan", "카디건") -> "가디건"
+            key in setOf("blazer", "블레이저") -> "블레이저"
+            key in setOf("jacket", "자켓", "jacket/blazer") -> "자켓"
+            key in setOf("coat", "코트", "outer coat") -> "코트"
+            key in setOf("jeans", "denim", "청바지") -> "청바지"
+            key in setOf("pants", "슬랙스", "slacks", "trousers") -> "슬랙스"
+            key in setOf("skirt", "스커트") -> "스커트"
+            key in setOf("dress", "one-piece", "원피스") -> "원피스"
+            key in setOf("sneakers", "스니커즈") -> "스니커즈"
+            key in setOf("boots", "부츠", "ankle boots") -> "부츠"
+            key in setOf("heels", "pumps", "loafer", "oxford", "dress shoes", "구두") -> "구두"
+            else -> ""
+        }
+        if (mapped.isBlank()) return ""
+        return if (confidence == null || confidence >= DETAIL_CONF_THRESHOLD) mapped else ""
+    }
+
+    private fun normalizeColor(raw: String?): String {
+        val key = raw.orEmpty().trim()
+        if (key.isBlank()) return ""
+        val lower = key.lowercase()
+        return when {
+            lower in setOf("black", "블랙") -> "블랙"
+            lower in setOf("white", "화이트") -> "화이트"
+            lower in setOf("gray", "grey", "그레이") -> "그레이"
+            lower in setOf("navy", "네이비") -> "네이비"
+            lower in setOf("blue", "블루") -> "블루"
+            lower in setOf("brown", "브라운") -> "브라운"
+            lower in setOf("beige", "베이지") -> "베이지"
+            lower in setOf("red", "레드") -> "레드"
+            lower in setOf("green", "그린") -> "그린"
+            lower in setOf("yellow", "옐로우") -> "옐로우"
+            lower in setOf("pink", "핑크") -> "핑크"
+            lower in setOf("purple", "퍼플") -> "퍼플"
+            lower in setOf("ivory", "아이보리") -> "아이보리"
+            lower in setOf("cream", "크림") -> "크림"
+            lower in setOf("khaki", "카키") -> "카키"
+            lower in setOf("orange", "오렌지") -> "오렌지"
+            else -> ""
+        }
+    }
+
+    private fun normalizePattern(pattern: String?, fabric: String?): String {
+        val patternKey = pattern.orEmpty().trim().lowercase()
+        val fabricKey = fabric.orEmpty().trim().lowercase()
+        val mappedPattern = when {
+            patternKey in setOf("solid", "plain", "무지") -> "무지"
+            patternKey in setOf("stripe", "striped", "스트라이프") -> "스트라이프"
+            patternKey in setOf("check", "plaid", "gingham", "체크") -> "체크"
+            patternKey in setOf("dot", "polka", "도트") -> "도트"
+            patternKey in setOf("floral", "flower", "플로럴") -> "플로럴"
+            patternKey in setOf("geometric", "지오메트릭") -> "지오메트릭"
+            patternKey in setOf("animal", "leopard", "tiger", "zebra", "애니멀") -> "애니멀"
+            patternKey.isNotBlank() -> "기타 패턴"
+            else -> ""
+        }
+        if (mappedPattern.isNotBlank()) return mappedPattern
+        return when {
+            fabricKey in setOf("cotton", "면") -> "면"
+            fabricKey in setOf("denim", "데님") -> "데님"
+            fabricKey in setOf("leather", "가죽") -> "가죽"
+            fabricKey in setOf("knit", "니트") -> "니트"
+            fabricKey in setOf("wool", "울") -> "울"
+            fabricKey in setOf("linen", "린넨") -> "린넨"
+            fabricKey in setOf("silk", "실크") -> "실크"
+            fabricKey in setOf("cashmere", "캐시미어") -> "캐시미어"
+            else -> ""
+        }
+    }
+
+    private fun buildDisplayName(color: String, pattern: String, detail: String): String {
+        val components = listOfNotNull(
+            color.takeIf { it.isNotBlank() },
+            pattern.takeIf { it.isNotBlank() && it !in setOf("무지", "기타 패턴") },
+            detail.takeIf { it.isNotBlank() }
+        )
+        if (components.isEmpty()) return ""
+        return components.joinToString(" ").take(60)
+    }
+
+    private fun buildTags(
+        category: String,
+        detail: String,
+        color: String,
+        pattern: String,
+        rawColor: String,
+        rawPattern: String,
+        rawFabric: String
+    ): List<String> {
+        val tags = linkedSetOf<String>()
+        if (category.isNotBlank() && category != "OTHER") tags += category
+        if (detail.isNotBlank()) tags += detail
+        if (color.isNotBlank()) tags += color
+        if (pattern.isNotBlank()) tags += pattern
+        listOf(rawColor, rawPattern, rawFabric)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { tags += it }
+        return tags.toList()
+    }
+
     private fun extractFirstJson(s: String): String? {
         val code = Regex("```json\\s*(.+?)```", setOf(RegexOption.DOT_MATCHES_ALL)).find(s)?.groupValues?.get(1)?.trim()
         if (!code.isNullOrBlank()) return code
@@ -181,5 +390,15 @@ object GeminiTagger {
         val confKeys = listOf("top","sub")
         if (!confKeys.all { conf.has(it) }) return false
         return true
+    }
+
+    private fun extractErrorMessage(raw: String): String {
+        if (raw.isBlank()) return "응답 본문 없음"
+        return runCatching {
+            val json = JSONObject(raw)
+            json.optJSONObject("error")?.optString("message").takeIf { !it.isNullOrBlank() }
+                ?: json.optString("message").takeIf { it.isNotBlank() }
+                ?: raw
+        }.getOrElse { raw }.take(400)
     }
 }

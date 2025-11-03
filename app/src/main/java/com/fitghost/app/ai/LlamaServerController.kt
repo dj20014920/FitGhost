@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -12,40 +14,88 @@ import kotlinx.coroutines.withContext
  */
 class LlamaServerController(private val context: Context) {
 
-    companion object { private const val TAG = "LlamaServerCtl" }
+    companion object {
+        private const val TAG = "LlamaServerCtl"
+
+        @Volatile
+        private var INSTANCE: LlamaServerController? = null
+
+        fun getInstance(context: Context): LlamaServerController {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: LlamaServerController(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
+
+    private val ensureMutex = Mutex()
 
     /**
      * 서버가 실행 중인지 확인하고, 아니면 시도해서 실행한다.
      * @return true 이면 서버 사용 가능
      */
     suspend fun ensureRunning(modelPath: String, mmprojPath: String?): Boolean = withContext(Dispatchers.IO) {
-        // 빌드 시 네이티브 엔진이 비활성화된 경우 바로 실패 처리하여 크래시 방지
-        if (!com.fitghost.app.BuildConfig.ENABLE_EMBEDDED_LLAMA) {
-            Log.w(TAG, "Embedded Llama is disabled by build flag; skipping ensureRunning")
-            return@withContext false
+        ensureMutex.withLock {
+            if (!com.fitghost.app.BuildConfig.ENABLE_EMBEDDED_LLAMA) {
+                Log.w(TAG, "Embedded Llama is disabled by build flag; skipping ensureRunning")
+                return@withLock false
+            }
+
+            if (EmbeddedLlamaServer.nativeIsAlive()) {
+                Log.v(TAG, "ensureRunning: already alive")
+                return@withLock true
+            }
+
+            val chatTemplate = if (modelPath.contains("smolvlm", ignoreCase = true)) "smolvlm" else null
+            val started = EmbeddedLlamaServer.nativeInit(
+                modelPath = modelPath,
+                mmprojPath = mmprojPath,
+                chatTemplate = chatTemplate,
+                ctx = 2048,
+                nThreads = 6
+            )
+            if (!started) {
+                Log.e(TAG, "nativeInit failed")
+                return@withLock false
+            }
+
+            repeat(20) {
+                if (EmbeddedLlamaServer.nativeIsAlive()) {
+                    Log.i(TAG, "Embedded llama server ready")
+                    return@withLock true
+                }
+                delay(500)
+            }
+            Log.e(TAG, "llama-server did not become healthy in time")
+            false
         }
-
-        if (EmbeddedLlamaServer.nativeIsAlive()) return@withContext true
-
-        // 외부 프로세스 실행 제거: JNI로 내장 서버 기동
-        val chatTemplate = if (modelPath.contains("smolvlm", ignoreCase = true)) "smolvlm" else null
-        val started = EmbeddedLlamaServer.nativeInit(
-            modelPath = modelPath,
-            mmprojPath = mmprojPath,
-            chatTemplate = chatTemplate, // SmolVLM의 경우 명시적으로 smolvlm 템플릿 지정
-            ctx = 2048, // reduce context for speed, still sufficient for our prompt
-            nThreads = 6
-        )
-        if (!started) return@withContext false
-
-        // 기동 대기 (최대 10초)
-        repeat(20) {
-            if (EmbeddedLlamaServer.nativeIsAlive()) return@withContext true
-            delay(500)
-        }
-        Log.e(TAG, "llama-server did not become healthy in time")
-        false
     }
 
-    suspend fun stop() = withContext(Dispatchers.IO) { EmbeddedLlamaServer.nativeStop() }
+    fun isHealthy(): Boolean {
+        return com.fitghost.app.BuildConfig.ENABLE_EMBEDDED_LLAMA && EmbeddedLlamaServer.nativeIsAlive()
+    }
+
+    suspend fun generateJson(
+        systemPrompt: String,
+        userPrompt: String,
+        temperature: Float,
+        maxTokens: Int
+    ): String = withContext(Dispatchers.IO) {
+        require(com.fitghost.app.BuildConfig.ENABLE_EMBEDDED_LLAMA) {
+            "Embedded Llama disabled by build flag"
+        }
+        check(isHealthy()) { "Embedded llama server is not running" }
+        EmbeddedLlamaServer.nativeAnalyze(
+            systemPrompt,
+            userPrompt,
+            byteArrayOf(),
+            temperature.toDouble(),
+            maxTokens
+        )
+    }
+
+    suspend fun stop() = withContext(Dispatchers.IO) {
+        ensureMutex.withLock {
+            EmbeddedLlamaServer.nativeStop()
+        }
+    }
 }

@@ -158,14 +158,28 @@ fun WardrobeAddScreen(
                 
                 result.onSuccess { metadata ->
                     // 결과 적용
-                    name = metadata.name
-                    category = metadata.toCategoryEnum()
-                    color = metadata.color
-                    detailType = metadata.detailType
-                    pattern = metadata.pattern
-                    brand = metadata.brand
-                    tagsRaw = metadata.tags.joinToString(", ")
-                    description = metadata.description
+                    if (metadata.name.isNotBlank()) {
+                        name = metadata.name
+                    }
+                    val normalizedCategory = metadata.category.trim().uppercase()
+                    if (normalizedCategory in setOf("TOP", "BOTTOM", "OUTER", "SHOES", "ACCESSORY")) {
+                        category = metadata.toCategoryEnum()
+                    }
+                    if (metadata.color.isNotBlank()) {
+                        color = metadata.color
+                    }
+                    if (metadata.detailType.isNotBlank()) {
+                        detailType = metadata.detailType
+                    }
+                    if (metadata.pattern.isNotBlank()) {
+                        pattern = metadata.pattern
+                    }
+                    if (metadata.brand.isNotBlank()) {
+                        brand = metadata.brand
+                    }
+                    if (metadata.tags.isNotEmpty()) {
+                        tagsRaw = metadata.tags.joinToString(", ")
+                    }
                     
                     snackbarHostState.showSnackbar(
                         "✨ 자동 완성되었습니다!",
@@ -189,7 +203,7 @@ fun WardrobeAddScreen(
         // 다이얼로그는 즉시 닫고, 화면 내 버튼/카드에서 진행률만 표시
         showModelDownloadDialog = false
         scope.launch {
-            downloadProgress = ModelManager.DownloadProgress(0f, 696f, 0)
+            downloadProgress = ModelManager.DownloadProgress(0f, 664f, 0)
             
             val result = modelManager.downloadModel { progress ->
                 downloadProgress = progress
@@ -491,6 +505,10 @@ fun WardrobeAddScreen(
                                     "네이비",
                                     "브라운",
                                     "베이지",
+                                    "아이보리",
+                                    "크림",
+                                    "카키",
+                                    "오렌지",
                                     "레드",
                                     "블루",
                                     "그린",
@@ -506,7 +524,24 @@ fun WardrobeAddScreen(
         if (showPatternDialog) {
             SimpleSelectionDialog(
                     title = "패턴 선택",
-                    options = listOf("무지", "스트라이프", "체크", "도트", "플로럴", "지오메트릭", "애니멀", "기타 패턴"),
+                    options = listOf(
+                            "무지",
+                            "스트라이프",
+                            "체크",
+                            "도트",
+                            "플로럴",
+                            "지오메트릭",
+                            "애니멀",
+                            "면",
+                            "데님",
+                            "가죽",
+                            "니트",
+                            "울",
+                            "린넨",
+                            "실크",
+                            "캐시미어",
+                            "기타 패턴"
+                    ),
                     onSelect = { pattern = it },
                     onDismiss = { showPatternDialog = false }
             )
@@ -521,7 +556,9 @@ fun WardrobeAddScreen(
                                     "셔츠",
                                     "후드티",
                                     "스웨터",
+                                    "가디건",
                                     "블레이저",
+                                    "자켓",
                                     "코트",
                                     "청바지",
                                     "슬랙스",
@@ -772,17 +809,38 @@ private fun SimpleSelectionDialog(
             confirmButton = {},
             title = { Text(title) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                var customValue by remember { mutableStateOf("") }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     options.forEach { opt ->
                         ElevatedButton(
                                 onClick = {
-                                    onSelect(opt)
+                                    onSelect(opt.trim())
                                     onDismiss()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                         ) { Text(opt) }
                     }
+                    Divider()
+                    OutlinedTextField(
+                            value = customValue,
+                            onValueChange = { customValue = it },
+                            label = { Text("기타 (직접 입력)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                    )
+                    ElevatedButton(
+                            onClick = {
+                                val trimmed = customValue.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    onSelect(trimmed)
+                                    onDismiss()
+                                }
+                            },
+                            enabled = customValue.trim().isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                    ) { Text("직접 입력 적용") }
                 }
             }
     )

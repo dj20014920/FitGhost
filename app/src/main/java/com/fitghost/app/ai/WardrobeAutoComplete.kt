@@ -61,11 +61,12 @@ Dropdown options (must choose exactly from these; if not applicable, choose OTHE
 
 Rules:
 - If a field is unknown or the model is not confident, return an empty string "" for that field (NEVER use placeholder like "string" or "...").
+- Memo/notes field ("description") must stay empty. Always output "" for description; user will write memos manually.
 - For tags, always return a JSON array of strings; can be [].
 - Sweater/Knit guideline (Korean fashion context):
   - TOP: thin knits worn as inner layer.
   - OUTER: thick knits/cardigans worn as outerwear.
-- Socks/Gloves/Scarves/Belts/Watches → ACCESSORY.
+  - Socks/Gloves/Scarves/Belts/Watches → ACCESSORY.
 - Do NOT confuse socks with shirts. If no collar/sleeves/buttons and tubular/foot-shaped, it is likely socks.
 - Keep description <= 200 chars.
 
@@ -157,13 +158,15 @@ The JSON schema to output:
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Starting clothing image analysis (cloud-first)...")
+                Log.d(TAG, "Existing fields snapshot: ${existing.summaryForLog()}")
+                Log.d(TAG, "Bitmap: ${image.width}x${image.height}")
                 // 1) PRD: Cloud-only (Gemini 2.5 Flash Lite, JSON 강제) — 폴백 없음
                 runCatching {
                     val res = com.fitghost.app.ai.cloud.GeminiTagger.tagImage(image)
                     res.getOrThrow()
                 }.onSuccess { json ->
                     val mapped = com.fitghost.app.ai.cloud.GeminiTagger.toClothingMetadata(json)
-                    Log.i(TAG, "Cloud tagging success")
+                    Log.i(TAG, "Cloud tagging success -> ${mapped.debugSummary()}")
                     return@withContext Result.success(cleanPlaceholders(mapped))
                 }.onFailure { e ->
                     Log.e(TAG, "Cloud tagging failed: ${e.message}")
@@ -378,6 +381,32 @@ The JSON schema to output:
             description = scrub(meta.description),
             tags = cleanedTags
         )
+    }
+    
+    private fun ExistingFields.summaryForLog(): String {
+        return buildString {
+            append("name='").append(name).append("', ")
+            append("category='").append(category?.name ?: "").append("', ")
+            append("brand='").append(brand).append("', ")
+            append("color='").append(color).append("', ")
+            append("size='").append(size).append("', ")
+            append("detailType='").append(detailType).append("', ")
+            append("pattern='").append(patternOrMaterial).append("', ")
+            append("tags=").append(tags).append(", ")
+            append("memoPresent=").append(memo.isNotBlank())
+        }
+    }
+
+    private fun ClothingMetadata.debugSummary(): String {
+        return buildString {
+            append("category=").append(category)
+            append(", name='").append(name).append('\'')
+            append(", color='").append(color).append('\'')
+            append(", detailType='").append(detailType).append('\'')
+            append(", pattern='").append(pattern).append('\'')
+            append(", brand='").append(brand).append('\'')
+            append(", tags=").append(tags)
+        }
     }
 
     private fun parseTagged(text: String): ClothingMetadata {

@@ -28,7 +28,7 @@ import org.json.JSONObject
  *
  * 모델 정보:
  * - 이름: LFM2-1.2B-Q4_0.gguf
- * - 크기: 696 MB
+ * - 크기: 664 MB (663.52 MB)
  * - 출처: CDN(emozleep) + Cloudflare Workers presign
  */
 class ModelManager private constructor(private val context: Context) {
@@ -58,7 +58,7 @@ class ModelManager private constructor(private val context: Context) {
         // 모델 정보 (LiquidAI LFM2로 전환)
         private const val MODEL_FILENAME = "LFM2-1.2B-Q4_0.gguf"
         private const val CURRENT_MODEL_VERSION = "lfm2-1.2b-q4_0"
-        private const val MODEL_SIZE_MB = 696L // 695.75 MB
+        private const val MODEL_SIZE_MB = 664L // 실제: 663.52 MB (695,749,568 bytes)
 
         // LFM2는 텍스트 모델(기본)로, 멀티모달 projector가 필요하지 않습니다.
         // 필요 시 mmproj 파일명을 지정하여 vision 경로를 활성화하세요(기본 비활성).
@@ -123,7 +123,9 @@ class ModelManager private constructor(private val context: Context) {
      * 현재 모델 상태 가져오기
      */
     suspend fun getModelState(): ModelState {
-        return observeModelState().first()
+        val state = observeModelState().first()
+        Log.d(TAG, "getModelState() -> $state")
+        return state
     }
     
     /**
@@ -309,11 +311,14 @@ class ModelManager private constructor(private val context: Context) {
                 val mainOkFinal = modelFile.exists() && modelFile.length() > 0L
 
                 return@withContext if (mainOkFinal && mmOkFinal) {
+                    Log.i(TAG, "Download completed successfully! Setting state to READY")
                     updateModelState(ModelState.READY)
                     updateModelPath(modelFile.absolutePath)
                     updateModelVersion(CURRENT_MODEL_VERSION)
+                    Log.i(TAG, "Model state updated: READY, Path: ${modelFile.absolutePath}")
                     Result.success(modelFile.absolutePath)
                 } else {
+                    Log.e(TAG, "Download failed: Model components missing (mainOk=$mainOkFinal, mmprojOk=$mmOkFinal)")
                     updateModelState(ModelState.ERROR)
                     Result.failure(Exception("Model components missing: mainOk=$mainOkFinal, mmprojOk=$mmOkFinal"))
                 }
@@ -375,18 +380,69 @@ class ModelManager private constructor(private val context: Context) {
     }
     
     /**
+     * 모델 삭제 (사용자 요청)
+     * 
+     * @return 삭제 성공 여부
+     */
+    suspend fun deleteModel(): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Deleting AI model...")
+                
+                // 상태를 NOT_READY로 변경
+                updateModelState(ModelState.NOT_READY)
+                
+                // DataStore 정보 삭제
+                context.modelDataStore.edit { prefs ->
+                    prefs.remove(MODEL_PATH_KEY)
+                    prefs.remove(MODEL_VERSION_KEY)
+                }
+                
+                // 다운로드된 파일 삭제
+                val modelDir = getModelDirectory()
+                if (modelDir.exists()) {
+                    val deleted = modelDir.deleteRecursively()
+                    if (!deleted) {
+                        Log.w(TAG, "Failed to delete model directory completely")
+                    }
+                }
+                
+                Log.d(TAG, "Model deleted successfully")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting model", e)
+                Result.failure(e)
+            }
+        }
+    }
+    
+    /**
+     * 모델 정보 가져오기
+     */
+    fun getModelInfo(): ModelInfo {
+        return ModelInfo(
+            name = "LiquidAI LFM2",
+            version = CURRENT_MODEL_VERSION,
+            sizeMB = MODEL_SIZE_MB,
+            filename = MODEL_FILENAME
+        )
+    }
+    
+    /**
+     * 모델 정보 데이터 클래스
+     */
+    data class ModelInfo(
+        val name: String,
+        val version: String,
+        val sizeMB: Long,
+        val filename: String
+    )
+    
+    /**
      * 모델 상태 초기화 (테스트/디버그용)
      */
     suspend fun resetModel() {
-        updateModelState(ModelState.NOT_READY)
-        context.modelDataStore.edit { prefs ->
-            prefs.remove(MODEL_PATH_KEY)
-            prefs.remove(MODEL_VERSION_KEY)
-        }
-        
-        // 다운로드된 파일 삭제
-        getModelDirectory().deleteRecursively()
-        
+        deleteModel()
         Log.d(TAG, "Model reset completed")
     }
     
@@ -457,6 +513,8 @@ class ModelManager private constructor(private val context: Context) {
         val lockFile = getLockFile()
         val mmprojFile = getMmprojFile()
 
+        Log.d(TAG, "reconcileState() - Current state: $state, Model file exists: ${modelFile.exists()}, Size: ${if (modelFile.exists()) modelFile.length() / (1024 * 1024) else 0}MB")
+
         when (state) {
             ModelState.DOWNLOADING -> {
                 if (tempFile.exists()) tempFile.delete()
@@ -473,8 +531,11 @@ class ModelManager private constructor(private val context: Context) {
                     if (tempFile.exists()) tempFile.delete()
                     if (lockFile.exists()) lockFile.delete()
                     updateModelState(ModelState.NOT_READY)
+                    Log.w(TAG, "Model files incomplete, changed to NOT_READY")
                     ModelState.NOT_READY
                 } else {
+                    // 파일이 정상이면 READY 상태 유지 (이미 DataStore에 저장되어 있음)
+                    Log.d(TAG, "Model files verified, keeping READY state")
                     ModelState.READY
                 }
             }

@@ -14,6 +14,10 @@ CDN_BASE = "https://cdn.emozleep.space/models"
 ALLOWED_ORIGINS = "*"
 ALLOWED_FILES = "models/LFM2-1.2B-Q4_0.gguf"
 
+# API Keys (개발 환경용 - 프로덕션에서는 Secrets 사용)
+# GEMINI_API_KEY는 Gemini Flash Lite용
+# NANOBANANA_API_KEY는 나노바나나(Gemini Image Preview)용
+
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "deepsleep-models"

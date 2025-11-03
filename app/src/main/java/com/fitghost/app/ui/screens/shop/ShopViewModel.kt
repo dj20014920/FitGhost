@@ -14,14 +14,42 @@ import com.fitghost.app.data.model.PriceRange
 import com.fitghost.app.data.model.WardrobeItem
 import com.fitghost.app.data.model.WeatherInfo
 import com.fitghost.app.data.model.FashionRecommendation
+import com.fitghost.app.data.repository.ImageSearchResult
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import android.graphics.Bitmap
 
 /** 상점 화면 ViewModel PRD: 검색 + 추천 상태 관리, API 연동 대비 */
 class ShopViewModel(
         private val shopRepository: ShopRepository,
         private val cartRepository: CartRepository
 ) : ViewModel() {
+    
+    companion object {
+        // 네비게이션 간 검색 파라미터 전달용
+        private var pendingSearchParams: Pair<String, String>? = null
+        private var pendingSearchQuery: String? = null
+        
+        fun setPendingSearch(itemDescription: String, itemCategory: String) {
+            pendingSearchParams = Pair(itemDescription, itemCategory)
+        }
+        
+        fun consumePendingSearch(): Pair<String, String>? {
+            val params = pendingSearchParams
+            pendingSearchParams = null
+            return params
+        }
+
+        fun setPendingSearchQuery(query: String) {
+            pendingSearchQuery = query
+        }
+
+        private fun consumePendingSearchQuery(): String? {
+            val query = pendingSearchQuery
+            pendingSearchQuery = null
+            return query
+        }
+    }
 
     // 검색어 상태
     private val _searchQuery = MutableStateFlow("")
@@ -51,6 +79,13 @@ class ShopViewModel(
     private val _isAiLoading = MutableStateFlow(false)
     val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
 
+    // 이미지 검색 상태 (새 기능)
+    private val _imageSearchResult = MutableStateFlow<ImageSearchResult?>(null)
+    val imageSearchResult: StateFlow<ImageSearchResult?> = _imageSearchResult.asStateFlow()
+    
+    private val _isImageSearching = MutableStateFlow(false)
+    val isImageSearching: StateFlow<Boolean> = _isImageSearching.asStateFlow()
+
     // UI 이벤트 (스낵바 등) 공통화
     sealed class ShopUiEvent {
         data class Snackbar(val message: String) : ShopUiEvent()
@@ -71,6 +106,17 @@ class ShopViewModel(
         shopRepository.wishlistProductsFlow()
             .onEach { _wishlistProducts.value = it }
             .launchIn(viewModelScope)
+        
+        // 네비게이션에서 전달된 검색 파라미터 확인
+        consumePendingSearch()?.let { (description, category) ->
+            searchMatchingItems(description, category)
+        }
+        consumePendingSearchQuery()?.let { query ->
+            updateSearchQuery(query)
+            if (query.isNotBlank()) {
+                searchProducts(query)
+            }
+        }
     }
 
     /** 검색어 업데이트 */
@@ -134,41 +180,41 @@ class ShopViewModel(
     }
 
     /** 찜하기 토글 - 낙관적 업데이트 + 성공/실패 스낵바 */
-    fun toggleWishlist(productId: String, isWishlisted: Boolean) {
+    fun toggleWishlist(product: Product) {
         viewModelScope.launch {
-            val newValue = !isWishlisted
+            val newValue = !product.isWishlisted
             // 1) 즉시 UI 반영 (검색 결과)
             _searchResults.update { list ->
-                list.map { if (it.id == productId) it.copy(isWishlisted = newValue) else it }
+                list.map { if (it.id == product.id) it.copy(isWishlisted = newValue) else it }
             }
             // 2) 즉시 UI 반영 (추천 상품들)
             _recommendations.update { recs ->
                 recs.map { rec ->
                     rec.copy(
                         recommendedProducts = rec.recommendedProducts.map { p ->
-                            if (p.id == productId) p.copy(isWishlisted = newValue) else p
+                            if (p.id == product.id) p.copy(isWishlisted = newValue) else p
                         }
                     )
                 }
             }
             try {
-                if (isWishlisted) {
-                    shopRepository.removeFromWishlist(productId)
-                    _events.emit(ShopUiEvent.Snackbar("위시리스트에서 제거되었습니다."))
-                } else {
-                    shopRepository.addToWishlist(productId)
+                if (newValue) {
+                    shopRepository.addToWishlist(product.copy(isWishlisted = true))
                     _events.emit(ShopUiEvent.Snackbar("위시리스트에 추가되었습니다."))
+                } else {
+                    shopRepository.removeFromWishlist(product.id)
+                    _events.emit(ShopUiEvent.Snackbar("위시리스트에서 제거되었습니다."))
                 }
             } catch (e: Exception) {
                 // 실패 시 원복
                 _searchResults.update { list ->
-                    list.map { if (it.id == productId) it.copy(isWishlisted = isWishlisted) else it }
+                    list.map { if (it.id == product.id) it.copy(isWishlisted = product.isWishlisted) else it }
                 }
                 _recommendations.update { recs ->
                     recs.map { rec ->
                         rec.copy(
                             recommendedProducts = rec.recommendedProducts.map { p ->
-                                if (p.id == productId) p.copy(isWishlisted = isWishlisted) else p
+                                if (p.id == product.id) p.copy(isWishlisted = product.isWishlisted) else p
                             }
                         )
                     }
@@ -305,5 +351,59 @@ class ShopViewModel(
             userPreferences = defaultPreferences,
             priceRange = defaultPreferences.priceRange
         )
+    }
+    
+    /** 이미지로 검색 (새 사진 업로드) */
+    fun searchByImage(bitmap: Bitmap) {
+        viewModelScope.launch {
+            _isImageSearching.value = true
+            try {
+                val result = shopRepository.searchByImage(bitmap)
+                result.fold(
+                    onSuccess = { searchResult ->
+                        _imageSearchResult.value = searchResult
+                        _searchResults.value = searchResult.products
+                        _events.emit(ShopUiEvent.Snackbar("${searchResult.products.size}개의 상품을 찾았습니다"))
+                    },
+                    onFailure = { exception ->
+                        _events.emit(ShopUiEvent.Snackbar("이미지 검색 실패: ${exception.message}"))
+                    }
+                )
+            } catch (e: Exception) {
+                _events.emit(ShopUiEvent.Snackbar("이미지 검색 중 오류가 발생했습니다"))
+            } finally {
+                _isImageSearching.value = false
+            }
+        }
+    }
+    
+    /** 옷장 아이템으로 유사 상품 찾기 */
+    fun searchMatchingItems(itemDescription: String, itemCategory: String) {
+        viewModelScope.launch {
+            _isImageSearching.value = true
+            try {
+                val result = shopRepository.searchMatchingItems(itemDescription, itemCategory)
+                result.fold(
+                    onSuccess = { searchResult ->
+                        _imageSearchResult.value = searchResult
+                        _searchResults.value = searchResult.products
+                        _events.emit(ShopUiEvent.Snackbar("${searchResult.products.size}개의 어울리는 상품을 찾았습니다"))
+                    },
+                    onFailure = { exception ->
+                        _events.emit(ShopUiEvent.Snackbar("검색 실패: ${exception.message}"))
+                    }
+                )
+            } catch (e: Exception) {
+                _events.emit(ShopUiEvent.Snackbar("검색 중 오류가 발생했습니다"))
+            } finally {
+                _isImageSearching.value = false
+            }
+        }
+    }
+    
+    /** 이미지 검색 결과 초기화 */
+    fun clearImageSearch() {
+        _imageSearchResult.value = null
+        _searchResults.value = emptyList()
     }
 }

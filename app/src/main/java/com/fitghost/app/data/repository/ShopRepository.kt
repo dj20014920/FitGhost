@@ -2,7 +2,13 @@ package com.fitghost.app.data.repository
 
 import com.fitghost.app.data.model.*
 import com.fitghost.app.data.network.GeminiFashionService
-import kotlinx.coroutines.delay
+import com.fitghost.app.ai.MatchingItemsGenerator
+import com.fitghost.app.data.repository.ProductSearchEngine
+import android.graphics.Bitmap
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 // Added for wishlist DataStore
 import android.content.Context
 import androidx.datastore.preferences.core.edit
@@ -12,18 +18,33 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.Flow
 import android.util.Log
+import com.fitghost.app.domain.RecommendationParams
+import com.fitghost.app.domain.RecommendationService
+import com.fitghost.app.data.weather.WeatherRepo
+import org.json.JSONArray
+import org.json.JSONObject
 
 // DataStore for wishlist
 private val Context.wishlistDataStore by preferencesDataStore(name = "wishlist_store")
-private val KEY_WISHLIST = stringSetPreferencesKey("wishlist_ids")
+private val KEY_WISHLIST = stringSetPreferencesKey("wishlist_products")
 
-/** 상품 검색 및 추천 Repository PRD: 네이버/구글 검색 API 연동 대비, 키 없을 때 우아한 폴백 */
+/** 상품 검색 및 추천 Repository */
 interface ShopRepository {
+    // 텍스트 검색
     suspend fun searchProducts(query: String): List<Product>
+    
+    // 이미지 기반 검색 (새 기능)
+    suspend fun searchByImage(bitmap: Bitmap): Result<ImageSearchResult>
+    
+    // 옷장 아이템 기반 검색 (새 기능)
+    suspend fun searchMatchingItems(itemDescription: String, itemCategory: String): Result<ImageSearchResult>
+    
+    // 추천
     suspend fun getRecommendations(): List<OutfitRecommendation>
-    suspend fun addToWishlist(productId: String)
+    
+    // 위시리스트
+    suspend fun addToWishlist(product: Product)
     suspend fun removeFromWishlist(productId: String)
-    // 위시리스트 탭을 위한 실시간 상품 스트림
     fun wishlistProductsFlow(): Flow<List<Product>>
     
     // NanoBanana AI 기반 추천 기능
@@ -32,132 +53,217 @@ interface ShopRepository {
     suspend fun matchOutfit(prompt: String, context: NanoBananaContext? = null): Result<FashionRecommendation>
 }
 
-/** Shop Repository 구현체 현재: Mock 데이터, 추후: 실제 API 연동 */
+/**
+ * 이미지 검색 결과
+ */
+data class ImageSearchResult(
+    val sourceImage: String? = null,  // 검색에 사용된 이미지 설명
+    val matchingCategories: List<String>, // AI가 생성한 어울리는 카테고리
+    val products: List<Product> // 실제 검색 결과
+)
+
+/** Shop Repository 구현체 - 실제 API 연동 */
 class ShopRepositoryImpl(
     private val context: Context,
-    private val nanoBananaService: GeminiFashionService = GeminiFashionService()
+    private val nanoBananaService: GeminiFashionService = GeminiFashionService(),
+    private val matchingItemsGenerator: MatchingItemsGenerator = MatchingItemsGenerator(context)
 ) : ShopRepository {
 
-    private val mockProducts =
-            listOf(
-                    Product(
-                            id = "1",
-                            name = "클래식 화이트 셔츠",
-                            price = 45000,
-                            imageUrl = "",
-                            category = ProductCategory.TOP,
-                            shopName = "Fashion Store",
-                            shopUrl = "https://example.com/1",
-                            description = "깔끔한 화이트 셔츠",
-                            tags = listOf("클래식", "화이트", "정장")
-                    ),
-                    Product(
-                            id = "2",
-                            name = "데님 청바지",
-                            price = 89000,
-                            imageUrl = "",
-                            category = ProductCategory.BOTTOM,
-                            shopName = "Jeans World",
-                            shopUrl = "https://example.com/2",
-                            description = "편안한 슬림핏 청바지",
-                            tags = listOf("데님", "캐주얼", "슬림")
-                    ),
-                    Product(
-                            id = "3",
-                            name = "니트 가디건",
-                            price = 65000,
-                            imageUrl = "",
-                            category = ProductCategory.OUTERWEAR,
-                            shopName = "Knit House",
-                            shopUrl = "https://example.com/3",
-                            description = "부드러운 니트 가디건",
-                            tags = listOf("니트", "가을", "따뜻")
-                    )
-            )
-
-    private val wishlistIdsFlow: Flow<Set<String>> =
-        context.wishlistDataStore.data.map { prefs -> prefs[KEY_WISHLIST] ?: emptySet() }
-
-    override fun wishlistProductsFlow(): Flow<List<Product>> =
-        wishlistIdsFlow.map { ids ->
-            // 현재 데이터 소스는 mockProducts 이므로, 해당 ID 에 매칭되는 항목만 노출
-            mockProducts
-                .filter { ids.contains(it.id) }
-                .map { it.copy(isWishlisted = true) }
-        }
-
-    override suspend fun searchProducts(query: String): List<Product> {
-        // 실제 구현 시: Retrofit + 네이버/구글 API
-        delay(500) // 네트워크 지연 시뮬레이션
-
-        if (query.isBlank()) return emptyList()
-
-        val filtered = mockProducts.filter {
-            it.name.contains(query, ignoreCase = true) ||
-                    it.tags.any { tag -> tag.contains(query, ignoreCase = true) }
-        }
-        // Apply wishlist flag from DataStore
-        val wishlist = context.wishlistDataStore.data.map { it[KEY_WISHLIST] ?: emptySet() }.first()
-        return filtered.map { it.copy(isWishlisted = wishlist.contains(it.id)) }
+    companion object {
+        private const val TAG = "ShopRepository"
     }
 
-    override suspend fun getRecommendations(): List<OutfitRecommendation> {
-        // PRD: 옷장 데이터 기반 추천 로직
-        delay(300)
+    private data class WishlistEntry(val product: Product, val savedAt: Long)
 
-        val base = listOf(
-                OutfitRecommendation(
-                        id = "rec1",
-                        title = "스마트 캐주얼 코디",
-                        description = "깔끔한 셔츠와 청바지의 완벽한 조합",
-                        recommendedProducts = mockProducts.take(2),
-                        baseGarmentId = "wardrobe_001", // 옷장의 바지 기준
-                        matchingReason = "이 청바지에는 화이트 셔츠가 완벽하게 어울려요"
-                ),
-                OutfitRecommendation(
-                        id = "rec2",
-                        title = "가을 레이어드 스타일",
-                        description = "니트 가디건으로 완성하는 따뜻한 코디",
-                        recommendedProducts = listOf(mockProducts[0], mockProducts[2]),
-                        baseGarmentId = "wardrobe_002",
-                        matchingReason = "이 셔츠 위에 니트 가디건을 입으면 세련된 룩이 완성돼요"
-                ),
-                OutfitRecommendation(
-                        id = "rec3",
-                        title = "데일리 캐주얼 룩",
-                        description = "편안하면서도 스타일리시한 일상 코디",
-                        recommendedProducts = listOf(mockProducts[1]),
-                        baseGarmentId = "wardrobe_003",
-                        matchingReason = "이 상의와 청바지는 언제나 실패 없는 조합이에요"
-                )
+    private val wishlistEntriesFlow: Flow<List<WishlistEntry>> =
+        context.wishlistDataStore.data.map { prefs ->
+            prefs[KEY_WISHLIST]?.mapNotNull { deserializeProduct(it) } ?: emptyList()
+        }
+
+    private val wardrobeRepository: WardrobeRepository = WardrobeRepository.create(context)
+    private val weatherRepo: WeatherRepo = WeatherRepo.create()
+    private val recommendationService: RecommendationService by lazy {
+        RecommendationService(
+            wardrobeRepository = wardrobeRepository,
+            weatherRepo = weatherRepo,
+            productSearchDataSource = object : RecommendationService.ProductSearchDataSource {
+                override suspend fun searchProducts(query: String, limit: Int): List<Product> {
+                    return ProductSearchEngine.search(query, maxResults = limit)
+                }
+            }
         )
-        // Apply wishlist flag from DataStore
-        val wishlist = context.wishlistDataStore.data.map { it[KEY_WISHLIST] ?: emptySet() }.first()
-        return base.map { rec ->
-            rec.copy(
-                recommendedProducts = rec.recommendedProducts.map { p ->
-                    p.copy(isWishlisted = wishlist.contains(p.id))
+    }
+
+    override fun wishlistProductsFlow(): Flow<List<Product>> =
+        wishlistEntriesFlow.map { entries ->
+            entries
+                .sortedByDescending { it.savedAt }
+                .map { it.product.copy(isWishlisted = true) }
+        }
+
+    override suspend fun searchProducts(query: String): List<Product> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+
+        val wishlistIds = getWishlistIds()
+        ProductSearchEngine.search(query)
+            .map { product -> product.copy(isWishlisted = wishlistIds.contains(product.id)) }
+    }
+
+    override suspend fun searchByImage(bitmap: Bitmap): Result<ImageSearchResult> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Searching by image")
+
+            val taggerResult = com.fitghost.app.ai.cloud.GeminiTagger.tagImage(bitmap)
+            if (taggerResult.isFailure) {
+                return@withContext Result.failure(taggerResult.exceptionOrNull() ?: Exception("Tagging failed"))
+            }
+
+            val metadata = com.fitghost.app.ai.cloud.GeminiTagger.toClothingMetadata(taggerResult.getOrThrow())
+            val itemDescription = "${metadata.color} ${metadata.detailType}"
+            val itemCategory = metadata.category
+
+            val categoriesResult = matchingItemsGenerator.generateMatchingCategories(
+                itemDescription,
+                itemCategory
+            )
+
+            val matchingCategories = categoriesResult.getOrElse { emptyList() }
+            val searchResults = coroutineScope {
+                matchingCategories.map { category ->
+                    async { searchProducts(category) }
+                }.map { it.await() }.flatten()
+            }
+
+            Result.success(
+                ImageSearchResult(
+                    sourceImage = itemDescription,
+                    matchingCategories = matchingCategories,
+                    products = searchResults.distinctBy { it.shopUrl }.take(20)
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in image search", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun searchMatchingItems(
+        itemDescription: String,
+        itemCategory: String
+    ): Result<ImageSearchResult> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Searching matching items for: $itemDescription ($itemCategory)")
+            val categoriesResult = matchingItemsGenerator.generateMatchingCategories(
+                itemDescription,
+                itemCategory
+            )
+
+            val matchingCategories = categoriesResult.getOrElse { emptyList() }
+            val searchResults = coroutineScope {
+                matchingCategories.map { category ->
+                    async { searchProducts(category) }
+                }.map { it.await() }.flatten()
+            }
+
+            Result.success(
+                ImageSearchResult(
+                    sourceImage = itemDescription,
+                    matchingCategories = matchingCategories,
+                    products = searchResults.distinctBy { it.shopUrl }.take(20)
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in matching items search", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getRecommendations(): List<OutfitRecommendation> = withContext(Dispatchers.IO) {
+        val wishlistIds = getWishlistIds()
+        recommendationService.getShopRecommendations().map { recommendation ->
+            recommendation.copy(
+                recommendedProducts = recommendation.recommendedProducts.map { product ->
+                    product.copy(isWishlisted = wishlistIds.contains(product.id))
                 }
             )
         }
     }
 
-    override suspend fun addToWishlist(productId: String) {
-        // 찜하기 로컬 저장 로직 - DataStore에 ID 저장
-        context.wishlistDataStore.edit { prefs ->
-            val set = prefs[KEY_WISHLIST] ?: emptySet()
-            prefs[KEY_WISHLIST] = set + productId
+    override suspend fun addToWishlist(product: Product) {
+        withContext(Dispatchers.IO) {
+            context.wishlistDataStore.edit { prefs ->
+                val current = prefs[KEY_WISHLIST]?.mapNotNull { deserializeProduct(it) }?.toMutableList()
+                    ?: mutableListOf()
+                current.removeAll { it.product.id == product.id }
+                current += WishlistEntry(product.copy(isWishlisted = true), System.currentTimeMillis())
+                prefs[KEY_WISHLIST] = current.map { serializeProduct(it.product, it.savedAt) }.toSet()
+            }
         }
-        delay(100)
     }
 
     override suspend fun removeFromWishlist(productId: String) {
-        // 찜하기 제거 로직 - DataStore에서 ID 제거
-        context.wishlistDataStore.edit { prefs ->
-            val set = prefs[KEY_WISHLIST] ?: emptySet()
-            prefs[KEY_WISHLIST] = set - productId
+        withContext(Dispatchers.IO) {
+            context.wishlistDataStore.edit { prefs ->
+                val remaining = prefs[KEY_WISHLIST]?.mapNotNull { deserializeProduct(it) }
+                    ?.filterNot { it.product.id == productId }
+                    ?: emptyList()
+                prefs[KEY_WISHLIST] = remaining.map { serializeProduct(it.product, it.savedAt) }.toSet()
+            }
         }
-        delay(100)
+    }
+
+    private suspend fun getWishlistIds(): Set<String> =
+        wishlistEntriesFlow.first().map { it.product.id }.toSet()
+
+    private fun serializeProduct(product: Product, savedAt: Long): String {
+        val json = JSONObject()
+            .put("id", product.id)
+            .put("name", product.name)
+            .put("price", product.price)
+            .put("imageUrl", product.imageUrl)
+            .put("category", product.category.name)
+            .put("shopName", product.shopName)
+            .put("shopUrl", product.shopUrl)
+            .put("description", product.description)
+            .put("source", product.source)
+            .put("savedAt", savedAt)
+        val tagsArray = JSONArray()
+        product.tags.forEach { tagsArray.put(it) }
+        json.put("tags", tagsArray)
+        return json.toString()
+    }
+
+    private fun deserializeProduct(raw: String): WishlistEntry? {
+        return try {
+            val json = JSONObject(raw)
+            val tagsJson = json.optJSONArray("tags")
+            val tags = buildList {
+                if (tagsJson != null) {
+                    for (i in 0 until tagsJson.length()) {
+                        add(tagsJson.optString(i))
+                    }
+                }
+            }
+            val product = Product(
+                id = json.optString("id"),
+                name = json.optString("name"),
+                price = json.optInt("price"),
+                imageUrl = json.optString("imageUrl"),
+                category = runCatching { ProductCategory.valueOf(json.optString("category")) }
+                    .getOrDefault(ProductCategory.OTHER),
+                shopName = json.optString("shopName"),
+                shopUrl = json.optString("shopUrl"),
+                description = json.optString("description"),
+                tags = tags,
+                isWishlisted = true,
+                source = json.optString("source")
+            )
+            val savedAt = json.optLong("savedAt", System.currentTimeMillis())
+            WishlistEntry(product, savedAt)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize wishlist entry", e)
+            null
+        }
     }
     
     // NanoBanana AI 기반 추천 기능 구현
