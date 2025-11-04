@@ -3,6 +3,10 @@ main = "src/index.js"
 compatibility_date = "2024-10-01"
 account_id = "081a9810680543ee912eb54ae15876a3"
 
+# Smart Placement: 미국 서부 지역에서 실행 (Gemini API 지원 지역)
+[placement]
+mode = "smart"
+
 # Cloudflare account and routes can be set via env/flags at deploy time
 # account_id = "<your-account-id>"
 # route = { pattern = "emozleep-presign.vinny4920-081.workers.dev", custom_domain = false }
@@ -14,9 +18,10 @@ CDN_BASE = "https://cdn.emozleep.space/models"
 ALLOWED_ORIGINS = "*"
 ALLOWED_FILES = "models/LFM2-1.2B-Q4_0.gguf"
 
-# API Keys (개발 환경용 - 프로덕션에서는 Secrets 사용)
-# GEMINI_API_KEY는 Gemini Flash Lite용
-# NANOBANANA_API_KEY는 나노바나나(Gemini Image Preview)용
+# API Keys (프로덕션에서는 Secrets 사용)
+# GEMINI_API_KEY: Google Cloud 통합 키 (Gemini, 구글 검색, 나노바나나 모두 사용)
+# NAVER_CLIENT_ID/SECRET: 네이버 쇼핑 검색
+# GOOGLE_CSE_CX: 구글 커스텀 검색 엔진 ID
 
 [[r2_buckets]]
 binding = "R2"
@@ -24,8 +29,7 @@ bucket_name = "deepsleep-models"
 # preview_bucket_name may be omitted; wrangler will use the same bucket
 
 # Secrets to set (do NOT commit values):
-# wrangler secret put GEMINI_API_KEY
-# wrangler secret put NAVER_CLIENT_ID
-# wrangler secret put NAVER_CLIENT_SECRET
-# wrangler secret put GOOGLE_CSE_KEY
-# wrangler secret put GOOGLE_CSE_CX
+# wrangler secret put GEMINI_API_KEY        # Google Cloud 통합 키 (필수)
+# wrangler secret put NAVER_CLIENT_ID       # 네이버 검색 (필수)
+# wrangler secret put NAVER_CLIENT_SECRET   # 네이버 검색 (필수)
+# wrangler secret put GOOGLE_CSE_CX         # 구글 검색 엔진 ID (필수)

@@ -1,6 +1,8 @@
 package com.fitghost.app.data.weather
 
 import com.fitghost.app.data.network.OpenMeteoApi
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Retrofit
@@ -16,9 +18,13 @@ class WeatherRepo(private val api: OpenMeteoApi) {
 
     companion object {
         fun create(): WeatherRepo {
+            val moshi = Moshi.Builder()
+                .add(KotlinJsonAdapterFactory())
+                .build()
+            
             val retrofit = Retrofit.Builder()
                 .baseUrl("https://api.open-meteo.com/")
-                .addConverterFactory(MoshiConverterFactory.create())
+                .addConverterFactory(MoshiConverterFactory.create(moshi))
                 .build()
             val api = retrofit.create(OpenMeteoApi::class.java)
             return WeatherRepo(api)

@@ -55,6 +55,7 @@ object GeminiTagger {
         val catTop = json.optString("category_top", "")
         val attributes = json.optJSONObject("attributes")
         val sub = json.optString("category_sub", "")
+        val brandRaw = json.optString("brand", "")
         val colorPrimary = attributes?.optString("color_primary", "") ?: ""
         val colorSecondary = attributes?.optString("color_secondary", "") ?: ""
         val patternRaw = attributes?.optString("pattern_basic", "") ?: ""
@@ -63,8 +64,12 @@ object GeminiTagger {
         val topConfidence = confidence?.optDouble("top", Double.NaN)?.takeIf { !it.isNaN() }
         val subConfidence = confidence?.optDouble("sub", Double.NaN)?.takeIf { !it.isNaN() }
 
-        val normalizedCategory = normalizeCategory(catTop, topConfidence)
+        var normalizedCategory = normalizeCategory(catTop, topConfidence)
         val normalizedDetail = normalizeDetail(sub, subConfidence)
+        // 카테고리가 비어있고 상세가 신뢰 가능한 경우 상세로부터 카테고리 유추(보수적 규칙)
+        if (normalizedCategory.isBlank() && normalizedDetail.isNotBlank()) {
+            normalizedCategory = inferCategoryFromDetail(normalizedDetail)
+        }
         val normalizedColorPrimary = normalizeColor(colorPrimary)
         val normalizedColor = if (normalizedColorPrimary.isNotBlank()) {
             normalizedColorPrimary
@@ -83,19 +88,21 @@ object GeminiTagger {
             fabricRaw
         )
 
+        val normalizedBrand = normalizeBrand(brandRaw)
+        
         val metadata = WardrobeAutoComplete.ClothingMetadata(
             category = normalizedCategory,
             name = displayName,
             color = normalizedColor,
             detailType = normalizedDetail,
             pattern = normalizedPattern,
-            brand = "",
+            brand = normalizedBrand,
             tags = tags,
             description = ""
         )
         Log.d(
             TAG,
-            "Mapped Gemini wardrobe JSON (top='$catTop', sub='$sub', color='$colorPrimary/$colorSecondary', pattern='$patternRaw', fabric='$fabricRaw', conf=${topConfidence ?: "?"}/${subConfidence ?: "?"}) -> $metadata"
+            "Mapped Gemini wardrobe JSON (top='$catTop', sub='$sub', brand='$brandRaw', color='$colorPrimary/$colorSecondary', pattern='$patternRaw', fabric='$fabricRaw', conf=${topConfidence ?: "?"}/${subConfidence ?: "?"}) -> $metadata"
         )
         return metadata
     }
@@ -160,12 +167,29 @@ object GeminiTagger {
 
     private fun buildUserPrompt(strict: Boolean): String {
         val base = """
-            의류 이미지에 대해 아래 JSON 스키마만 반환하세요. 설명 금지. JSON만.
+            당신은 전문 의류 데이터 라벨러입니다. 목표는 의류 이미지 1장을 보고
+            아래 스키마에 맞춘 단 하나의 JSON만을 생성하는 것입니다.
+            - 출력은 오직 JSON만: 코드펜스/설명/주석 금지
+            - 각 필드는 허용된 선택지 안에서만 값 선정
+            - 불확실하면 해당 필드는 비우거나(null 허용 필드만 null) 기본 규칙 적용
+
+            분류 원칙(중요):
+            - category_top: 상의|하의|아우터|기타 중 선택
+            - category_sub: 한국어 소분류(예: 티셔츠, 셔츠, 후드티, 스웨터, 가디건, 블레이저, 자켓, 코트, 청바지, 슬랙스, 스커트, 원피스, 스니커즈, 구두, 부츠)
+            - brand: 브랜드명 (이미지에서 로고나 브랜드 텍스트가 명확히 보이는 경우만 채움, 불확실하면 null)
+            - attributes.color_primary: 대표 색상(예: black/white/gray/navy/blue/brown/beige/red/green/yellow/pink/purple/ivory/cream/khaki/orange)
+            - attributes.color_secondary: 보조 색상 또는 null
+            - attributes.pattern_basic: 패턴 ONLY → solid|stripe|check|dot|graphic|null
+              (주의: knit/wool/cotton/leather/denim 등 소재를 여기에 넣지 말 것)
+            - attributes.fabric_basic: 소재 ONLY → cotton|denim|leather|knit|silk|wool|linen|null
+            - 패턴/소재를 혼동 금지. 무지이면 pattern_basic=solid, fabric_basic은 실제 원단 추정 시만 채움
+
             스키마:
             {
               "image_id": "uuid",
               "category_top": "상의|하의|아우터|기타",
               "category_sub": "티셔츠|셔츠|청바지|스커트|…",
+              "brand": "Nike|Adidas|Zara|…|null",
               "attributes": {
                 "color_primary": "red|white|black|…",
                 "color_secondary": "white|null",
@@ -254,56 +278,93 @@ object GeminiTagger {
     private fun normalizeDetail(raw: String?, confidence: Double?): String {
         val key = raw.orEmpty().trim().lowercase()
         if (key.isBlank()) return ""
-        val mapped = when {
+        var mapped = when {
             key in setOf("tshirt", "t-shirt", "티셔츠", "tee") -> "티셔츠"
             key in setOf("shirt", "셔츠", "button-down", "button up") -> "셔츠"
             key in setOf("hoodie", "후드티", "hooded sweatshirt") -> "후드티"
+            key in setOf("sweatshirt", "맨투맨") -> "스웨터" // 드롭다운에 스웨트셔츠가 없으므로 스웨터로 근사
             key in setOf("sweater", "knitwear", "knit", "pullover") -> "스웨터"
-            key in setOf("cardigan", "카디건") -> "가디건"
+            // PRD: 한국어 응답 "가디건"을 신뢰. 과거 오타("카디건")도 수용
+            key in setOf("cardigan", "가디건", "카디건") -> "가디건"
             key in setOf("blazer", "블레이저") -> "블레이저"
-            key in setOf("jacket", "자켓", "jacket/blazer") -> "자켓"
+            key in setOf("jacket", "자켓", "jacket/blazer", "재킷", "jumper", "점퍼") -> "자켓"
             key in setOf("coat", "코트", "outer coat") -> "코트"
             key in setOf("jeans", "denim", "청바지") -> "청바지"
             key in setOf("pants", "슬랙스", "slacks", "trousers") -> "슬랙스"
             key in setOf("skirt", "스커트") -> "스커트"
             key in setOf("dress", "one-piece", "원피스") -> "원피스"
-            key in setOf("sneakers", "스니커즈") -> "스니커즈"
+            key in setOf("sneakers", "스니커즈", "운동화") -> "스니커즈"
             key in setOf("boots", "부츠", "ankle boots") -> "부츠"
-            key in setOf("heels", "pumps", "loafer", "oxford", "dress shoes", "구두") -> "구두"
+            key in setOf("heels", "pumps", "loafer", "oxford", "dress shoes", "구두", "로퍼") -> "구두"
             else -> ""
+        }
+        // 부분 일치 보정(모델이 복합 문자열을 반환하는 경우)
+        if (mapped.isBlank()) {
+            mapped = when {
+                key.contains("cardigan") || key.contains("가디건") || key.contains("카디건") -> "가디건"
+                key.contains("blazer") || key.contains("jacket") || key.contains("자켓") || key.contains("재킷") || key.contains("jumper") || key.contains("점퍼") -> "자켓"
+                key.contains("hood") || key.contains("후드") -> "후드티"
+                key.contains("sweater") || key.contains("knit") || key.contains("맨투맨") -> "스웨터"
+                key.contains("tshirt") || key.contains("t-shirt") || key.contains("tee") || key.contains("티셔츠") -> "티셔츠"
+                key.contains("shirt") || key.contains("셔츠") -> "셔츠"
+                key.contains("jeans") || key.contains("denim") || key.contains("청바지") -> "청바지"
+                key.contains("pants") || key.contains("slacks") || key.contains("trousers") || key.contains("슬랙스") -> "슬랙스"
+                key.contains("skirt") || key.contains("스커트") -> "스커트"
+                key.contains("dress") || key.contains("원피스") -> "원피스"
+                key.contains("sneaker") || key.contains("운동화") || key.contains("스니커즈") -> "스니커즈"
+                key.contains("boots") || key.contains("부츠") -> "부츠"
+                key.contains("loafer") || key.contains("oxford") || key.contains("구두") || key.contains("로퍼") || key.contains("pumps") -> "구두"
+                else -> ""
+            }
         }
         if (mapped.isBlank()) return ""
         return if (confidence == null || confidence >= DETAIL_CONF_THRESHOLD) mapped else ""
     }
 
+    private fun normalizeBrand(raw: String?): String {
+        val key = raw.orEmpty().trim()
+        if (key.isBlank() || key.equals("null", ignoreCase = true)) return ""
+        // 브랜드명은 대소문자 보존하되 앞뒤 공백만 제거
+        return key.take(50) // 최대 50자로 제한
+    }
+
     private fun normalizeColor(raw: String?): String {
         val key = raw.orEmpty().trim()
         if (key.isBlank()) return ""
-        val lower = key.lowercase()
+        val normalized = key.lowercase()
+            .replace('-', ' ')
+            .replace('_', ' ')
+            .replace('/', ' ')
+            .replace("  ", " ")
+            .trim()
+
+        fun has(vararg tokens: String) = tokens.any { normalized.contains(it) }
+
         return when {
-            lower in setOf("black", "블랙") -> "블랙"
-            lower in setOf("white", "화이트") -> "화이트"
-            lower in setOf("gray", "grey", "그레이") -> "그레이"
-            lower in setOf("navy", "네이비") -> "네이비"
-            lower in setOf("blue", "블루") -> "블루"
-            lower in setOf("brown", "브라운") -> "브라운"
-            lower in setOf("beige", "베이지") -> "베이지"
-            lower in setOf("red", "레드") -> "레드"
-            lower in setOf("green", "그린") -> "그린"
-            lower in setOf("yellow", "옐로우") -> "옐로우"
-            lower in setOf("pink", "핑크") -> "핑크"
-            lower in setOf("purple", "퍼플") -> "퍼플"
-            lower in setOf("ivory", "아이보리") -> "아이보리"
-            lower in setOf("cream", "크림") -> "크림"
-            lower in setOf("khaki", "카키") -> "카키"
-            lower in setOf("orange", "오렌지") -> "오렌지"
+            has("black", "블랙", "검정") -> "블랙"
+            has("white", "화이트", "흰", "하양") -> "화이트"
+            // "light gray", "grey", 등 복합 표기 허용
+            has("gray", "grey", "그레이", "회색") -> "그레이"
+            has("navy", "네이비") -> "네이비"
+            has("blue", "블루") -> "블루"
+            has("brown", "브라운") -> "브라운"
+            has("beige", "베이지") -> "베이지"
+            has("red", "레드") -> "레드"
+            has("green", "그린") -> "그린"
+            has("olive", "올리브") -> "카키"
+            has("yellow", "옐로우") -> "옐로우"
+            has("pink", "핑크") -> "핑크"
+            has("purple", "퍼플") -> "퍼플"
+            has("ivory", "아이보리") -> "아이보리"
+            has("cream", "크림") -> "크림"
+            has("khaki", "카키") -> "카키"
+            has("orange", "오렌지") -> "오렌지"
             else -> ""
         }
     }
 
     private fun normalizePattern(pattern: String?, fabric: String?): String {
         val patternKey = pattern.orEmpty().trim().lowercase()
-        val fabricKey = fabric.orEmpty().trim().lowercase()
         val mappedPattern = when {
             patternKey in setOf("solid", "plain", "무지") -> "무지"
             patternKey in setOf("stripe", "striped", "스트라이프") -> "스트라이프"
@@ -315,18 +376,8 @@ object GeminiTagger {
             patternKey.isNotBlank() -> "기타 패턴"
             else -> ""
         }
-        if (mappedPattern.isNotBlank()) return mappedPattern
-        return when {
-            fabricKey in setOf("cotton", "면") -> "면"
-            fabricKey in setOf("denim", "데님") -> "데님"
-            fabricKey in setOf("leather", "가죽") -> "가죽"
-            fabricKey in setOf("knit", "니트") -> "니트"
-            fabricKey in setOf("wool", "울") -> "울"
-            fabricKey in setOf("linen", "린넨") -> "린넨"
-            fabricKey in setOf("silk", "실크") -> "실크"
-            fabricKey in setOf("cashmere", "캐시미어") -> "캐시미어"
-            else -> ""
-        }
+        // 패턴 필드는 패턴만. 소재는 태그로만 보존하고 필드에는 채우지 않음
+        return mappedPattern
     }
 
     private fun buildDisplayName(color: String, pattern: String, detail: String): String {
@@ -353,11 +404,22 @@ object GeminiTagger {
         if (detail.isNotBlank()) tags += detail
         if (color.isNotBlank()) tags += color
         if (pattern.isNotBlank()) tags += pattern
+        // 로깅/검색 보조를 위해 원문 값도 보존하되, 중복/공백 제거
         listOf(rawColor, rawPattern, rawFabric)
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .forEach { tags += it }
         return tags.toList()
+    }
+
+    private fun inferCategoryFromDetail(detail: String): String {
+        return when (detail) {
+            "티셔츠", "셔츠", "후드티", "스웨터" -> "TOP"
+            "가디건", "블레이저", "자켓", "코트" -> "OUTER"
+            "청바지", "슬랙스", "스커트" -> "BOTTOM"
+            "스니커즈", "구두", "부츠" -> "SHOES"
+            else -> "" // 보수적으로 미추론
+        }
     }
 
     private fun extractFirstJson(s: String): String? {
@@ -381,7 +443,7 @@ object GeminiTagger {
     }
 
     private fun isValidSchema(obj: JSONObject): Boolean {
-        val requiredTop = listOf("image_id","category_top","category_sub","attributes","confidence")
+        val requiredTop = listOf("image_id","category_top","category_sub","brand","attributes","confidence")
         if (!requiredTop.all { obj.has(it) }) return false
         val attrs = obj.optJSONObject("attributes") ?: return false
         val conf = obj.optJSONObject("confidence") ?: return false

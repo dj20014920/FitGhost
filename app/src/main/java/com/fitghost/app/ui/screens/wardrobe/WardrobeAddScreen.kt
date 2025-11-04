@@ -454,8 +454,8 @@ fun WardrobeAddScreen(
                     OutlinedTextField(
                             value = pattern,
                             onValueChange = { pattern = it },
-                            label = { Text("패턴/소재") },
-                            placeholder = { Text("예: 무지, 스트라이프, 면 100%") },
+                            label = { Text("패턴") },
+                            placeholder = { Text("예: 무지, 스트라이프") },
                             modifier = Modifier.fillMaxWidth(),
                             trailingIcon = {
                                 IconButton(onClick = { showPatternDialog = true }) {
@@ -532,14 +532,6 @@ fun WardrobeAddScreen(
                             "플로럴",
                             "지오메트릭",
                             "애니멀",
-                            "면",
-                            "데님",
-                            "가죽",
-                            "니트",
-                            "울",
-                            "린넨",
-                            "실크",
-                            "캐시미어",
                             "기타 패턴"
                     ),
                     onSelect = { pattern = it },

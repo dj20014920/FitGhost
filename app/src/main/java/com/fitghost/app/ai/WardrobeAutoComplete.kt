@@ -57,12 +57,13 @@ You are a fashion item analysis assistant. Analyze the clothing IMAGE together w
 Dropdown options (must choose exactly from these; if not applicable, choose OTHER and provide a free-text string):
 - category: TOP, BOTTOM, OUTER, SHOES, ACCESSORY, OTHER
 - color (examples, not exhaustive): black, white, gray, navy, blue, red, green, yellow, beige, brown, ivory, cream, pink, purple, khaki, orange
-- pattern/material (examples): solid, stripe, plaid, denim, leather, knit, wool, cotton, linen
+- pattern ONLY (examples): solid, stripe, plaid, dot, graphic
 
 Rules:
 - If a field is unknown or the model is not confident, return an empty string "" for that field (NEVER use placeholder like "string" or "...").
 - Memo/notes field ("description") must stay empty. Always output "" for description; user will write memos manually.
 - For tags, always return a JSON array of strings; can be [].
+- Do NOT put fabrics in the pattern field. Fabrics like knit/wool/cotton/leather/denim belong to materials only and must not be used as pattern.
 - Sweater/Knit guideline (Korean fashion context):
   - TOP: thin knits worn as inner layer.
   - OUTER: thick knits/cardigans worn as outerwear.
@@ -78,7 +79,7 @@ The JSON schema to output:
   "color": "from dropdown or empty",
   "size": "free text or empty",
   "detailType": "specific type (e.g., hoodie, jeans) or empty",
-  "pattern": "pattern/material from dropdown if possible, else empty",
+  "pattern": "pattern from dropdown if possible, else empty",
   "tags": ["tag1", "tag2"],
   "description": "brief description or empty"
 }
@@ -219,7 +220,7 @@ The JSON schema to output:
                     append("color: ").append(existing.color).append('\n')
                     append("size: ").append(existing.size).append('\n')
                     append("detailType: ").append(existing.detailType).append('\n')
-                    append("pattern/material: ").append(existing.patternOrMaterial).append('\n')
+                    append("pattern: ").append(existing.patternOrMaterial).append('\n')
                     append("tags: ").append(existing.tags.joinToString("; ")).append('\n')
                     append("memo: ").append(existing.memo)
                 }

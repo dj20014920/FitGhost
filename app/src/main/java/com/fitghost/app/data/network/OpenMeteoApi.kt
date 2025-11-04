@@ -1,5 +1,7 @@
 package com.fitghost.app.data.network
 
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -13,14 +15,16 @@ interface OpenMeteoApi {
     ): OpenMeteoResponse
 }
 
+@JsonClass(generateAdapter = true)
 data class OpenMeteoResponse(
-    val latitude: Double?,
-    val longitude: Double?,
-    val current_weather: CurrentWeather?
+    @Json(name = "latitude") val latitude: Double?,
+    @Json(name = "longitude") val longitude: Double?,
+    @Json(name = "current_weather") val current_weather: CurrentWeather?
 )
 
+@JsonClass(generateAdapter = true)
 data class CurrentWeather(
-    val temperature: Double?,
-    val windspeed: Double?,
-    val weathercode: Int?
+    @Json(name = "temperature") val temperature: Double?,
+    @Json(name = "windspeed") val windspeed: Double?,
+    @Json(name = "weathercode") val weathercode: Int?
 )

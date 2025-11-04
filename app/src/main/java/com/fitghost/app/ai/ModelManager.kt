@@ -155,7 +155,8 @@ class ModelManager private constructor(private val context: Context) {
      */
     fun getMmprojPath(): String? {
         val f = getMmprojFile()
-        return if (f.exists() && f.length() > 0L) f.absolutePath else null
+        // 디렉터리가 length()>0를 반환하는 플랫폼이 있어 오검출 방지를 위해 isFile 체크 추가
+        return if (f.exists() && f.isFile && f.length() > 0L) f.absolutePath else null
     }
     
     /**

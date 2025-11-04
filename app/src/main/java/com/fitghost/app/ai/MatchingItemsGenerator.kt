@@ -99,7 +99,8 @@ Rules:
      * - 실용적인 검색어 생성
      */
     private fun buildPrompt(itemDescription: String, itemCategory: String): String {
-        return """You are a fashion stylist. Given clothing item: "$itemDescription" (category: $itemCategory).
+        val normalized = normalizeDescription(itemDescription)
+        return """You are a fashion stylist. Given clothing item: "$normalized" (category: $itemCategory).
 
 Task: Suggest 5 matching items that coordinate well. Format: "color + item name" (e.g., "white shirt").
 
@@ -115,6 +116,19 @@ JSON schema:
 }
 
 Output:""".trimIndent()
+    }
+
+    // 간단한 토큰 중복 제거: "블랙 블랙 후드티" -> "블랙 후드티"
+    private fun normalizeDescription(text: String): String {
+        val tokens = text.split("\n", "\t", " ").filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return text.trim()
+        val out = ArrayList<String>(tokens.size)
+        var prev: String? = null
+        for (t in tokens) {
+            if (prev == null || !t.equals(prev, ignoreCase = true)) out += t
+            prev = t
+        }
+        return out.joinToString(" ")
     }
     
     /**

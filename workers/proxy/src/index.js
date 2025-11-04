@@ -73,7 +73,7 @@ async function handleHealthCheck(env) {
     keys: {
       gemini: !!env.GEMINI_API_KEY,
       naver: !!env.NAVER_CLIENT_ID && !!env.NAVER_CLIENT_SECRET,
-      google_cse: !!env.GOOGLE_CSE_KEY && !!env.GOOGLE_CSE_CX,
+      google_cse: !!(env.GEMINI_API_KEY || env.GOOGLE_CSE_KEY) && !!env.GOOGLE_CSE_CX,
     }
   };
   
@@ -162,6 +162,7 @@ async function handleGeminiTag(request, env) {
 /**
  * Gemini Image Preview 가상 피팅 핸들러
  * 나노바나나 대체: 이미지 생성 및 편집
+ * GEMINI_API_KEY 단일 키 사용 (Google Cloud 통합)
  */
 async function handleGeminiGenerate(request, env) {
   const provider = 'google-gemini-generate';
@@ -169,26 +170,24 @@ async function handleGeminiGenerate(request, env) {
   // URL 파라미터에서 모델 선택
   const model = new URL(request.url).searchParams.get('model') || 'gemini-2.5-flash';
   
-  // 모델에 따라 적절한 API 키 선택
-  let apiKey;
-  if (model.includes('image')) {
-    // 이미지 생성/편집 모델: 나노바나나 키 사용
-    apiKey = env.NANOBANANA_API_KEY || env.GEMINI_API_KEY;
-  } else {
-    // 텍스트 모델: Gemini 키 사용
-    apiKey = env.GEMINI_API_KEY;
-  }
+  // GEMINI_API_KEY 단일 키 사용 (모든 Gemini 모델 통합)
+  const apiKey = env.GEMINI_API_KEY;
   
   if (!apiKey) {
+    console.error('[GeminiGenerate] GEMINI_API_KEY not set');
     return corsResponse(env, json({ 
       code: 500, 
-      message: 'API key not set', 
+      message: 'GEMINI_API_KEY가 설정되지 않았습니다. wrangler secret put GEMINI_API_KEY 명령으로 설정하세요.', 
       provider 
     }, 500));
   }
   
   const target = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const body = await request.text();
+  
+  console.log('[GeminiGenerate] Request to:', target);
+  console.log('[GeminiGenerate] Model:', model);
+  console.log('[GeminiGenerate] API Key length:', apiKey.length);
   
   const res = await fetch(target, {
     method: 'POST',
@@ -198,6 +197,13 @@ async function handleGeminiGenerate(request, env) {
     },
     body,
   });
+  
+  console.log('[GeminiGenerate] Response status:', res.status);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('[GeminiGenerate] Error response:', errorText);
+  }
   
   return corsResponse(env, await proxyResult(provider, res));
 }
@@ -236,16 +242,27 @@ async function handleNaverShop(url, env) {
 
 /**
  * 구글 커스텀 검색 핸들러
+ * GEMINI_API_KEY를 사용 (Google Cloud 통합 키)
  */
 async function handleGoogleCse(url, env) {
   const provider = 'google-cse';
-  const key = env.GOOGLE_CSE_KEY;
+  
+  // GEMINI_API_KEY를 우선 사용 (Google Cloud 통합)
+  const key = env.GEMINI_API_KEY || env.GOOGLE_CSE_KEY;
   const cx = env.GOOGLE_CSE_CX;
   
-  if (!key || !cx) {
+  if (!key) {
     return corsResponse(env, json({ 
       code: 500, 
-      message: 'Google CSE credentials not set', 
+      message: 'GEMINI_API_KEY not set. Google CSE requires Google Cloud API key.', 
+      provider 
+    }, 500));
+  }
+  
+  if (!cx) {
+    return corsResponse(env, json({ 
+      code: 500, 
+      message: 'GOOGLE_CSE_CX (Search Engine ID) not set', 
       provider 
     }, 500));
   }
@@ -256,7 +273,18 @@ async function handleGoogleCse(url, env) {
   
   const target = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=${encodeURIComponent(num)}&start=${encodeURIComponent(start)}`;
   
+  console.log('[GoogleCSE] Request to:', target.replace(key, 'REDACTED'));
+  console.log('[GoogleCSE] Search Engine ID:', cx);
+  
   const res = await fetch(target);
+  
+  console.log('[GoogleCSE] Response status:', res.status);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('[GoogleCSE] Error response:', errorText);
+  }
+  
   return corsResponse(env, await proxyResult(provider, res));
 }
 

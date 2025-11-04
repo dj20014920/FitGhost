@@ -35,9 +35,43 @@
   - 단일 ABI만 빌드하면 디버그 빌드 시간이 크게 줄어듭니다. 디바이스(또는 에뮬레이터) 아키텍처에 맞춰 선택하세요.
 
 
-## 🔁 NOWGUIDE 최신 동기화 (2025-11-03 - Gemini 2.5 Flash-Lite 완전 적용)
+## 🔁 NOWGUIDE 최신 동기화 (2025-11-04 - Retrofit Moshi 통합 완료)
 
-### ✅ 최신 완료 사항 (2025-11-03) ⭐ 업데이트
+### ✅ 최신 완료 사항 (2025-11-04) ⭐ 업데이트
+
+#### 0. **Retrofit JSON 컨버터 통합 및 에러 수정** ✅ 100%
+- **문제**: OpenMeteoResponse 컨버터 생성 실패로 날씨 API 호출 시 앱 크래시
+  - 에러: "Unable to create converter for class com.fitghost.app.data.network.OpenMeteoResponse"
+  - 원인: Moshi 어노테이션 누락 + KSP 프로세서 미설정
+
+- **해결 방법**:
+  1. OpenMeteoApi.kt에 Moshi 어노테이션 추가
+     - `@JsonClass(generateAdapter = true)` 추가
+     - `@Json(name = "...")` 필드명 매핑
+  2. build.gradle.kts에 KSP 프로세서 추가
+     - `ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")`
+  3. 모든 Retrofit 클라이언트를 Moshi로 통일
+     - SearchApiClient: Gson → Moshi 변경
+     - WeatherRepo: KotlinJsonAdapterFactory 추가
+     - Gson 의존성 제거 (불필요)
+
+- **기술적 개선**:
+  - DRY 원칙: 단일 JSON 컨버터로 통일
+  - KISS 원칙: 불필요한 Gson 제거
+  - 일관성: 모든 네트워크 레이어가 Moshi 사용
+
+- **변경된 파일**:
+  - `app/src/main/java/com/fitghost/app/data/network/OpenMeteoApi.kt`
+  - `app/src/main/java/com/fitghost/app/data/network/SearchApiClient.kt`
+  - `app/src/main/java/com/fitghost/app/data/weather/WeatherRepo.kt`
+  - `app/build.gradle.kts`
+
+- **검증 완료**:
+  - KSP 빌드 성공 (17 tasks executed)
+  - 모든 파일 진단 통과 (No diagnostics found)
+  - 날씨 API 호출 정상 작동 예상
+
+### ✅ 이전 완료 사항 (2025-11-03) ⭐
 
 #### 1. **Gemini 2.5 Flash-Lite 완전 적용 및 검증** ✅ 100%
 - **모델 업그레이드 완료**

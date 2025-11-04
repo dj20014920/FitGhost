@@ -98,6 +98,7 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeInit(
         JNIEnv* env, jclass,
         jstring jModelPath, jstring jMmprojPath,
         jstring jChatTemplate, jint jCtx, jint jThreads) {
+    std::lock_guard<std::mutex> _l(g_mutex);
     if (g_model && g_ctx && g_mtmd) return JNI_TRUE;
     const char* model = env->GetStringUTFChars(jModelPath, nullptr);
     const char* mmproj = jMmprojPath ? env->GetStringUTFChars(jMmprojPath, nullptr) : nullptr;
@@ -182,6 +183,11 @@ static std::string generate_greedy_json(
         bool prompt_already_evaluated)
 {
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
+    if (!vocab) {
+        return std::string("{}");
+    }
+    ALOGI("gen_json: start (prompt_evaluated=%s, n_past=%d, max=%d, prompt_len=%zu)",
+          prompt_already_evaluated ? "true" : "false", (int)n_past, max_tokens, prompt.size());
 
     // 프롬프트가 아직 평가되지 않았다면, 프롬프트를 토크나이즈하여 pos = n_past .. n_past + n - 1 로 디코드
     if (!prompt_already_evaluated) {
@@ -190,11 +196,15 @@ static std::string generate_greedy_json(
         std::vector<llama_token> toks((size_t)need);
         int32_t n = llama_tokenize(vocab, prompt.c_str(), (int32_t)prompt.size(), toks.data(), (int32_t)toks.size(), /*add_special*/true, /*parse_special*/true);
         if (n < 0) return std::string("{}");
+        ALOGI("gen_json: tokenized need=%d, n=%d", (int)need, (int)n);
 
         struct llama_batch b = llama_batch_get_one(toks.data(), n);
         // 절대 위치 보정
         for (int i = 0; i < n; ++i) b.pos[i] = n_past + i;
-        if (llama_decode(g_ctx, b) != 0) return std::string("{}");
+        if (llama_decode(g_ctx, b) != 0) {
+            ALOGW("gen_json: llama_decode(prompt) failed");
+            return std::string("{}");
+        }
         n_past += n;
     }
 
@@ -205,6 +215,7 @@ static std::string generate_greedy_json(
         float * logits = llama_get_logits(g_ctx);
         if (!logits) break;
         const int32_t n_vocab = llama_vocab_n_tokens(vocab);
+        if (n_vocab <= 0) break;
         // argmax 샘플링 (JSON 안정성을 위해 탐욕적)
         int32_t best = 0; float best_logit = logits[0];
         for (int32_t t = 1; t < n_vocab; ++t) {
@@ -221,9 +232,13 @@ static std::string generate_greedy_json(
         llama_token ntok = best;
         struct llama_batch nb = llama_batch_get_one(&ntok, 1);
         nb.pos[0] = n_past; // 중요: pos를 누적 길이로 설정
-        if (llama_decode(g_ctx, nb) != 0) break;
+        if (llama_decode(g_ctx, nb) != 0) {
+            ALOGW("gen_json: llama_decode(next) failed at i=%d", i);
+            break;
+        }
         n_past += 1;
     }
+    ALOGI("gen_json: done, out_len=%zu", out.size());
     return out;
 }
 
@@ -240,17 +255,22 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeAnalyze(
         return env->NewStringUTF("{}");
     }
 
+    ALOGI("nativeAnalyze: begin (img=%s, maxTokens=%d, temp=%.3f)",
+          (jImagePng ? "non-null" : "null"), (int)jMaxTokens, (double)jTemperature);
+
     const char * sys = jSystemPrompt ? env->GetStringUTFChars(jSystemPrompt, nullptr) : "";
     const char * usr = jUserText     ? env->GetStringUTFChars(jUserText, nullptr)     : "";
     const char * marker = mtmd_default_marker();
     std::string prompt = std::string(sys) + "\n\n" + usr;
+    ALOGI("nativeAnalyze: prompts len sys=%zu usr=%zu total=%zu",
+          strlen(sys), strlen(usr), prompt.size());
 
-    // 새 요청마다 KV 메모리 초기화 (동일 seq_id에서 pos=0 재사용 시 충돌 방지)
-    // 최신 llama API: context -> memory 핸들을 얻어 clear 호출
-    llama_memory_t mem = llama_get_memory(g_ctx);
-    if (mem) {
-        llama_memory_clear(mem, /*data=*/true);
-    }
+    // 새 요청마다 KV 메모리 초기화
+    // 현재 포함된 llama.cpp 헤더에서는 llama_memory_* API를 제공하므로 이를 사용
+    // (llama_kv_cache_clear 미제공 환경 호환)
+    // 안전성 우선: 일부 빌드 조합에서 memory_clear 가 충돌 보고됨
+    // 현재 요청은 항상 pos=0에서 새로 평가하므로, KV 초기화를 생략하고 절대 위치를 재설정하여 덮어쓴다.
+    // (필요 시 llama_memory_seq_rm(mem, 0, 0, -1)로 대체 고려)
 
     // 멀티모달 경로 (PNG 버퍼 → bitmap → 토크나이즈 → eval)
     bool used_mm = false;
@@ -258,6 +278,7 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeAnalyze(
     if (g_mtmd && jImagePng) {
         jsize len = env->GetArrayLength(jImagePng);
         if (len > 0) {
+            ALOGI("nativeAnalyze: vision path, png bytes=%d", (int)len);
             jbyte * bytes = env->GetByteArrayElements(jImagePng, nullptr);
             mtmd_bitmap * bmp = mtmd_helper_bitmap_init_from_buf(g_mtmd, (const unsigned char*)bytes, (size_t)len);
             if (bmp) {
@@ -280,6 +301,7 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeAnalyze(
                     if (mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, /*n_past*/0, /*seq_id*/0, g_n_batch, /*logits_last*/true, &new_n_past) == 0) {
                         used_mm = true;
                         n_past = new_n_past; // 이어서 생성 시 사용할 시작 위치
+                        ALOGI("nativeAnalyze: vision eval ok, n_past=%d", (int)n_past);
                     }
                 }
                 mtmd_bitmap_free(bmp);
@@ -301,6 +323,7 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeAnalyze(
     if (jSystemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, sys);
     if (jUserText)     env->ReleaseStringUTFChars(jUserText, usr);
     if (result.empty()) result = "{}";
+    ALOGI("nativeAnalyze: done, result size=%zu", result.size());
     return env->NewStringUTF(result.c_str());
 }
 
