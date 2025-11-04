@@ -35,3 +35,5 @@ tmp/*.gguf
 
 # Cloudflare workers local secrets (do not commit)
 workers/**/.dev.vars
+workers/**/setup-secrets.sh
+**/test_*_proxy.sh
