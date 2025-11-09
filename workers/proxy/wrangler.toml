@@ -3,9 +3,10 @@ main = "src/index.js"
 compatibility_date = "2024-10-01"
 account_id = "081a9810680543ee912eb54ae15876a3"
 
-# Smart Placement: 미국 서부 지역에서 실행 (Gemini API 지원 지역)
-[placement]
-mode = "smart"
+# Gemini API는 특정 지역에서만 사용 가능 (미국 동부)
+# Smart Placement 대신 명시적 위치 설정
+# [placement]
+# mode = "smart"
 
 # Cloudflare account and routes can be set via env/flags at deploy time
 # account_id = "<your-account-id>"

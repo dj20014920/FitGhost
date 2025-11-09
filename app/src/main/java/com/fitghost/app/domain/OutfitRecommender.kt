@@ -31,23 +31,33 @@ private data class ScoredItem(
  * 옷장 아이템과 날씨를 기반으로 최적의 코디 조합을 생성하는 도메인 컴포넌트.
  * - 가온/한랭/바람 조건을 고려하여 상하의/아우터를 선택
  * - 태그, 이름, 색상 정보를 활용해 스타일 태그 및 추천 사유 생성
+ * - 날짜 기반 시드를 사용하여 매일 다른 추천 제공
  */
 class OutfitRecommender {
 
     fun recommend(
         weather: WeatherSnapshot,
         wardrobe: List<WardrobeItemEntity>,
-        maxOutfits: Int = 10
+        maxOutfits: Int = 10,
+        dailySeed: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000) // 날짜 기반 시드
     ): List<OutfitPlan> {
         if (wardrobe.isEmpty()) return emptyList()
 
         val categorized = wardrobe.groupBy { it.category }
-        val topScored = scoreItems(categorized[WardrobeCategory.TOP].orEmpty(), weather).take(5)
-        val bottomScored = scoreItems(categorized[WardrobeCategory.BOTTOM].orEmpty(), weather).take(5)
-        val outerScored = scoreItems(categorized[WardrobeCategory.OUTER].orEmpty(), weather).take(5)
-        val shoeScored = scoreItems(categorized[WardrobeCategory.SHOES].orEmpty(), weather).take(5)
-        val accessoryScored = scoreItems(categorized[WardrobeCategory.ACCESSORY].orEmpty(), weather).take(5)
-        val onePieceScored = scoreItems(categorized[WardrobeCategory.OTHER].orEmpty(), weather).take(5)
+        
+        // 날짜 기반 시드로 다양성 추가
+        val topScored = scoreItems(categorized[WardrobeCategory.TOP].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed).take(5)
+        val bottomScored = scoreItems(categorized[WardrobeCategory.BOTTOM].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed + 1).take(5)
+        val outerScored = scoreItems(categorized[WardrobeCategory.OUTER].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed + 2).take(5)
+        val shoeScored = scoreItems(categorized[WardrobeCategory.SHOES].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed + 3).take(5)
+        val accessoryScored = scoreItems(categorized[WardrobeCategory.ACCESSORY].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed + 4).take(5)
+        val onePieceScored = scoreItems(categorized[WardrobeCategory.OTHER].orEmpty(), weather)
+            .shuffleWithSeed(dailySeed + 5).take(5)
 
         val plans = mutableListOf<OutfitPlan>()
         val needsOuter = needsOuterLayer(weather)
@@ -77,10 +87,26 @@ class OutfitRecommender {
             }
         }
 
-        return plans
+        // 점수 기반 정렬 후 상위권에서 다양성 추가
+        val sortedPlans = plans
             .distinctBy { it.id }
             .sortedByDescending { it.score }
+        
+        // 상위 점수대(top 30%)에서 날짜 기반으로 선택하여 다양성 확보
+        val topTierCount = (sortedPlans.size * 0.3).toInt().coerceAtLeast(maxOutfits)
+        val topTier = sortedPlans.take(topTierCount)
+        
+        return topTier
+            .shuffleWithSeed(dailySeed + 100)
             .take(maxOutfits)
+    }
+    
+    /**
+     * 시드 기반 셔플로 같은 날에는 일관된 결과, 다른 날에는 다른 결과 제공
+     */
+    private fun <T> List<T>.shuffleWithSeed(seed: Long): List<T> {
+        val random = kotlin.random.Random(seed)
+        return this.shuffled(random)
     }
 
     private fun scoreItems(

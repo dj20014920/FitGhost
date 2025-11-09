@@ -40,7 +40,7 @@ FitGhost — Android MVP 통합 PRD (Unified, Cloud-only)
 	7.	라이선스/주석(KDoc)
 	8.	클라우드 태깅/추천 JSON 스키마 및 검증 규칙
 	9.	성능 로그 리포트(지연/성공률, PII 미수집)
-	10.	AI 경로: Cloud-only(Gemini 2.5 Flash Lite → JSON 강제)
+	10.	AI 경로: Cloud-only(Google Vertex AI Gemini 2.5 Flash Lite → JSON 강제, OAuth 2.0 Service Account 인증)
   11.	서버리스 우선(로컬 저장). 외부 API: Open-Meteo(키 불요), Naver Shopping, Google Programmable Search(JSON API) — 모든 키 기반 API는 Cloudflare Workers 프록시를 통해 호출(앱 내 키 저장/전달 금지)
 	13.	보안: API 키/시크릿 클라 포함 금지, PII/HW 식별자 수집 금지
 	14.	성능 목표(Cloud-only): 태깅 응답 600–1500ms, 추천 400–1200ms, 성공률 ≥ 98%, 재시도 ≤ 2회
@@ -49,8 +49,8 @@ FitGhost — Android MVP 통합 PRD (Unified, Cloud-only)
 	3.	구현 범위(필수)
 
 A. Try-On(가상 피팅, 클라우드 API — NanoBanana/Gemini)
-•	CompositeTryOnEngine: NanoBananaTryOnEngine 우선(Generative Language API), 필요 시 CloudTryOnEngine
-•	인증: 앱은 Cloudflare Workers 프록시 엔드포인트를 호출하며, 실제 공급자 API 키/시크릿은 Worker Secrets로 보관/주입(앱 내 키 없음)
+•	CompositeTryOnEngine: NanoBananaTryOnEngine 우선(Google Vertex AI Gemini 2.5 Flash Image 모델), 필요 시 CloudTryOnEngine
+•	인증: 앱은 Cloudflare Workers 프록시 엔드포인트를 호출하며, 실제 Service Account 키와 OAuth 2.0 토큰 생성은 Worker Secrets로 보관/처리(앱 내 키 없음)
 •	저장 경로: getExternalFilesDir(Pictures)/tryon/*.png (FileProvider 공유)
 •	교체점: TryOnEngine 인터페이스 유지
 •	상태: 구현 완료(FittingScreen, CompositeTryOnEngine, GeminiApiHelper)
@@ -72,7 +72,8 @@ F. 갤러리 & 폴더블
 •	폴더블에서 칼럼 자동 증가
 
 G. 자동 태깅(Auto-Tagging, Cloud-only)
-•	기본: Cloud models/gemini-2.5-flash-lite → JSON 강제(스키마 검증/재시도) → Wardrobe 자동채움
+•	기본: Google Vertex AI models/gemini-2.5-flash-lite → JSON 강제(스키마 검증/재시도) → Wardrobe 자동채움
+•	인증: Cloudflare Workers 프록시에서 OAuth 2.0 Service Account 토큰 자동 생성/갱신
 
 
 ⸻
@@ -148,10 +149,24 @@ app/
 •	정책: 실패 시 재시도 후 사용자 편집/재시도 안내
 
 ⸻
-	10.	클라우드 태깅/추천 전환 (JSON 강제, Gemini 2.5 Flash Lite)
+	10.	클라우드 태깅/추천 전환 (Vertex AI, JSON 강제, Gemini 2.5 Flash Lite)
 
-10.1 자동 태깅(Cloud, 기본 경로)
-- 모델: `models/gemini-2.5-flash-lite` (Google)
+**🔄 2025-11-09 업데이트: Vertex AI 전환 완료**
+- **전환 사유**: Google AI Studio API의 지역 제한 문제 해결
+  - 문제: "User location is not supported for the API use" 오류
+  - 원인: API 키 기반 인증의 지리적 제약
+  - 해결: Vertex AI OAuth 2.0 Service Account 인증으로 전환
+- **변경 사항**:
+  - 인증: API Key → OAuth 2.0 Service Account (JWT RS256)
+  - 엔드포인트: generativelanguage.googleapis.com → us-central1-aiplatform.googleapis.com
+  - 프록시: Cloudflare Workers에서 자동 토큰 생성 및 갱신
+  - 지역 제한: 완전 해결 (전 세계 어디서나 사용 가능)
+- **비용**: 사용량 기반 과금 (예상 월 $0.25, 1000회 태깅 기준)
+
+10.1 자동 태깅(Cloud, 기본 경로, Vertex AI)
+- 모델: `gemini-2.5-flash-lite` (Google Vertex AI)
+- API: Vertex AI Gemini API v1
+- 인증: OAuth 2.0 Service Account (Cloudflare Workers에서 자동 처리)
 - 목적: 이미지 의류 자동 태깅을 JSON 스키마로 강제 출력
 - 입력: `image_uri` 또는 `image_base64` (≤ 2MB, JPEG/PNG)
 - 출력(JSON, 고정 스키마)
@@ -172,9 +187,12 @@ app/
 - 프롬프트 정책: "JSON만", "설명 텍스트 금지", "스키마 미준수 시 재생성"
 - 검증: JSON Schema Validator/Strict parser → 실패 시 최대 2회 재시도, 폴백 없음; 사용자 편집/재시도 안내
 - 개인정보: 원본 이미지 외부 전송 시 사용자 동의(옵트인); 메타데이터만 저장
- - 호출: 앱→Cloudflare Workers 프록시(예: `https://<your-worker-domain>/proxy/gemini/tag`)로 POST. Worker 내부에서 Google Generative Language API 호출 및 키 주입.
+- 호출: 앱→Cloudflare Workers 프록시(`https://fitghost-proxy.vinny4920-081.workers.dev/proxy/gemini/tag`)로 POST
+  - Worker 내부에서 Vertex AI OAuth 토큰 자동 생성 후 Vertex AI Gemini API 호출
 
-10.2 옷장 추천(Cloud → JSON 세트 강제)
+10.2 옷장 추천(Cloud → JSON 세트 강제, Vertex AI)
+- 모델: `gemini-2.5-flash-lite` (Google Vertex AI)
+- 인증: OAuth 2.0 Service Account (자동 처리)
 - 입력: 사용자가 등록한 아이템의 카테고리/속성(예: 상의: 화이트 티셔츠)
 - 과업: 등록 아이템과 어울리는 세트 아이템(최대 4개: 하의/신발/아우터/액세서리 등 자유 추론) 추천
 - 출력(JSON, 최소 필수 형태)
@@ -189,6 +207,7 @@ app/
 ```
 - 확장 필드(옵션): "rationale_ko": "추천 사유", "style_hint": "미니멀|스트릿|…"
 - 프롬프트: "배열 길이 1–4", "중복 카테고리 최소화", "검색 키워드 한국어 우선"
+- 호출: 앱→Cloudflare Workers 프록시→Vertex AI (OAuth 토큰 자동 관리)
 
 10.3 외부 검색 연동(병렬, Naver/Google — Cloudflare 프록시 경유) ✅ 테스트 완료
 

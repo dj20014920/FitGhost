@@ -52,7 +52,7 @@ class NanoBananaTryOnEngine(private val client: OkHttpClient = createHttpClient(
                 // 엔드포인트: Cloudflare Workers 프록시 우선, 없으면 Google 공식 엔드포인트
                 val apiUrl =
                         proxyBase.trimEnd('/') +
-                                "/proxy/gemini/generateContent?model=gemini-2.5-flash-image-preview"
+                                "/proxy/gemini/generateContent?model=gemini-2.5-flash-image"
 
                 try {
                     // 1) 이미지 로드 및 변환 (과금 최적화: 해상도 제한)
@@ -95,7 +95,7 @@ class NanoBananaTryOnEngine(private val client: OkHttpClient = createHttpClient(
 
                     Log.d(
                             TAG,
-                            "Calling Google Gemini API (model=gemini-2.5-flash-image-preview, model=1, clothes=${clothingPngs.size})"
+                            "Calling Google Gemini API (model=gemini-2.5-flash-image, model=1, clothes=${clothingPngs.size})"
                     )
 
                     // 3) API 요청 생성

@@ -29,6 +29,11 @@ fun CartGroupCard(
     onUpdateQuantity: (String, Int) -> Unit,
     onRemoveItem: (String) -> Unit,
     onClearShopCart: () -> Unit,
+    // 선택 기능 (선택 결제)
+    selectable: Boolean = false,
+    selectedItemIds: Set<String> = emptySet(),
+    onToggleGroup: ((Boolean) -> Unit)? = null,
+    onToggleItem: ((String, Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -50,6 +55,20 @@ fun CartGroupCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectable) {
+                        val allSelected = group.items.all { selectedItemIds.contains(it.id) }
+                        val anySelected = group.items.any { selectedItemIds.contains(it.id) }
+                        TriStateCheckbox(
+                            state = when {
+                                allSelected -> androidx.compose.ui.state.ToggleableState.On
+                                anySelected -> androidx.compose.ui.state.ToggleableState.Indeterminate
+                                else -> androidx.compose.ui.state.ToggleableState.Off
+                            },
+                            onClick = { onToggleGroup?.invoke(!allSelected) }
+                        )
+                    }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -114,7 +133,10 @@ fun CartGroupCard(
                     CartItemCard(
                         item = item,
                         onUpdateQuantity = { quantity -> onUpdateQuantity(item.id, quantity) },
-                        onRemove = { onRemoveItem(item.id) }
+                        onRemove = { onRemoveItem(item.id) },
+                        selectable = selectable,
+                        selected = selectedItemIds.contains(item.id),
+                        onToggleSelected = { checked -> onToggleItem?.invoke(item.id, checked) }
                     )
                 }
             }
@@ -126,7 +148,7 @@ fun CartGroupCard(
                     com.fitghost.app.util.Browser.open(ctx, group.shopUrl)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                text = "${group.shopName}에서 결제하기 (${group.totalPrice}원)",
+                text = "${group.shopName}에서 결제하기 (${group.totalPrice.toKrw()})",
                 shape = RoundedCornerShape(12.dp)
             )
         }
@@ -141,6 +163,9 @@ private fun CartItemCard(
     item: CartItem,
     onUpdateQuantity: (Int) -> Unit,
     onRemove: () -> Unit,
+    selectable: Boolean,
+    selected: Boolean,
+    onToggleSelected: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -155,6 +180,12 @@ private fun CartItemCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (selectable) {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onToggleSelected(it) }
+                )
+            }
             // 상품 이미지 placeholder
             Box(
                 modifier = Modifier
@@ -185,7 +216,7 @@ private fun CartItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${item.productPrice}원",
+                    text = item.productPrice.toKrw(),
                     style = MaterialTheme.typography.titleMedium,
                     color = FitGhostColors.AccentPrimary,
                     fontWeight = FontWeight.Bold
@@ -270,6 +301,103 @@ private fun CartItemCard(
     }
 }
 
+/** 빈 장바구니 화면 (공용) */
+@Composable
+fun EmptyCartContent() {
+    Card(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .softClay(),
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.ShoppingCart,
+                contentDescription = null,
+                modifier = Modifier.size(96.dp),
+                tint = FitGhostColors.TextTertiary
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "장바구니가 비어있습니다",
+                style = MaterialTheme.typography.titleLarge,
+                color = FitGhostColors.TextSecondary,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "상점에서 마음에 드는 상품을 담아보세요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = FitGhostColors.TextTertiary
+            )
+        }
+    }
+}
+
+/** 장바구니 요약 카드 (공용) */
+@Composable
+fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .softClay(),
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "🛒 장바구니 요약",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "총 ${totalItems}개 상품 • ${totalGroups}개 쇼핑몰",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
+                        RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = totalItems.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = FitGhostColors.AccentPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
 /**
  * 하단 결제 섹션
  * PRD: 몰별 순차 결제 버튼
@@ -308,12 +436,12 @@ fun BottomPaymentSection(
                         style = MaterialTheme.typography.bodyMedium,
                         color = FitGhostColors.TextSecondary
                     )
-                    Text(
-                        text = "${totalPrice}원",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = FitGhostColors.TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                Text(
+                    text = totalPrice.toKrw(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
                 }
                 
                 Text(
@@ -354,3 +482,8 @@ fun BottomPaymentSection(
         }
     }
 }
+
+// 가격 KRW 포맷터
+private fun Int.toKrw(): String = kotlin.runCatching {
+    java.text.NumberFormat.getCurrencyInstance(java.util.Locale.KOREA).format(this)
+}.getOrElse { "${this}원" }

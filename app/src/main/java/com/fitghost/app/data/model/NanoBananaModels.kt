@@ -164,7 +164,8 @@ data class FashionRecommendation(
         val recommendedItems: List<RecommendedItem>,
         val reasoning: String,
         val confidence: Float,
-        val occasion: String? = null
+        val occasion: String? = null,
+        val products: List<Product> = emptyList() // 실제 검색된 상품들
 )
 
 /** 추천 아이템 */

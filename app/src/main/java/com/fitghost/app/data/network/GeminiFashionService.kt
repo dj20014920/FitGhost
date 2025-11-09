@@ -35,9 +35,9 @@ class GeminiFashionService {
     companion object {
         private const val TAG = "GeminiFashionService"
         
-        // Gemini 모델 설정
-        private const val TEXT_MODEL = "gemini-2.5-flash"
-        private const val IMAGE_MODEL = "gemini-2.5-flash-image-preview"
+        // Gemini 모델 설정 (실제 존재하는 모델 사용)
+        private const val TEXT_MODEL = "gemini-2.5-flash-lite"
+        private const val IMAGE_MODEL = "gemini-2.5-flash-image"
         
         // 응답 설정
         private const val MAX_OUTPUT_TOKENS = 512
@@ -180,7 +180,11 @@ class GeminiFashionService {
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
                 .build()
             httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) error("HTTP ${'$'}{resp.code}")
+                if (!resp.isSuccessful) {
+                    val errorBody = resp.body?.string() ?: "No error body"
+                    Log.e(TAG, "Image generation HTTP ${resp.code}: $errorBody")
+                    error("HTTP ${resp.code}: ${resp.message}")
+                }
                 val json = resp.body?.string() ?: error("Empty body")
                 val bytes = extractInlinePng(json)
                 Log.d(TAG, "패션 이미지 생성 완료")
@@ -375,8 +379,8 @@ $prompt
         require(proxyBase.isNotBlank()) {
             "PROXY_BASE_URL이 설정되어 있지 않습니다. Cloudflare 프록시를 먼저 구성해주세요."
         }
-        val url =
-            proxyBase.trimEnd('/') + "/proxy/gemini/generateContent?model=$TEXT_MODEL"
+        // GeminiTagger와 동일한 엔드포인트 사용 (검증됨)
+        val url = proxyBase.trimEnd('/') + "/proxy/gemini/tag"
 
         var attempt = 0
         var tokens = maxTokens
@@ -402,22 +406,25 @@ $prompt
                     .build()
 
                 httpClient.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) error("HTTP ${'$'}{resp.code}")
-                    val json = resp.body?.string()?.trim().orEmpty()
-                    return extractTextFromCandidates(json)
+                    val responseBody = resp.body?.string() ?: ""
+                    if (!resp.isSuccessful) {
+                        Log.e(TAG, "HTTP ${resp.code}: $responseBody")
+                        error("HTTP ${resp.code}: $responseBody")
+                    }
+                    return extractTextFromCandidates(responseBody.trim())
                 }
             } catch (e: java.net.SocketTimeoutException) {
                 lastError = e
                 attempt += 1
                 tokens = (tokens / 2).coerceAtLeast(128)
                 val backoffMs = 500L * attempt
-                Log.w(TAG, "REST timeout (attempt=$attempt), retrying with maxTokens=$tokens in ${'$'}backoffMs ms", e)
+                Log.w(TAG, "REST timeout (attempt=$attempt), retrying with maxTokens=$tokens in ${backoffMs}ms", e)
                 kotlinx.coroutines.delay(backoffMs)
             } catch (e: Exception) {
                 lastError = e
                 attempt += 1
                 val backoffMs = 500L * attempt
-                Log.w(TAG, "REST error (attempt=$attempt), retrying in ${'$'}backoffMs ms", e)
+                Log.w(TAG, "REST error (attempt=$attempt), retrying in ${backoffMs}ms", e)
                 kotlinx.coroutines.delay(backoffMs)
             }
         }
@@ -465,7 +472,11 @@ $prompt
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
                 .build()
             httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) error("HTTP ${'$'}{resp.code}")
+                if (!resp.isSuccessful) {
+                    val errorBody = resp.body?.string() ?: "No error body"
+                    Log.e(TAG, "Image editing HTTP ${resp.code}: $errorBody")
+                    error("HTTP ${resp.code}: ${resp.message}")
+                }
                 val json = resp.body?.string() ?: error("Empty body")
                 val bytes = extractInlinePng(json)
                 Log.d(TAG, "패션 이미지 편집 완료")

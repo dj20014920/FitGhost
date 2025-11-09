@@ -3,6 +3,7 @@ package com.fitghost.app.ui.screens.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -16,11 +17,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.fitghost.app.data.weather.WeatherSnapshot
 import com.fitghost.app.domain.HomeOutfitRecommendation
 import com.fitghost.app.ui.components.SoftClayIconButton
@@ -168,6 +173,7 @@ fun HomeScreen(
                 OutfitRecommendationSection(
                     outfits = uiState.outfits,
                     isLoading = uiState.isLoading && uiState.outfits.isEmpty(),
+                    weather = uiState.weather?.weather,
                     onViewShop = { query ->
                         com.fitghost.app.ui.screens.shop.ShopViewModel.setPendingSearchQuery(query)
                         onNavigateToShop()
@@ -253,18 +259,19 @@ private fun WeatherCard(
 private fun OutfitRecommendationSection(
     outfits: List<HomeOutfitRecommendation>,
     isLoading: Boolean,
+    weather: WeatherSnapshot?,
     onViewShop: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(
-            text = "오늘의 추천 코디",
-            style = MaterialTheme.typography.headlineMedium,
-            color = FitGhostColors.TextPrimary,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         when {
             isLoading && outfits.isEmpty() -> {
+                Text(
+                    text = "오늘의 추천 코디",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center
@@ -274,6 +281,13 @@ private fun OutfitRecommendationSection(
             }
             outfits.isEmpty() -> {
                 Text(
+                    text = "오늘의 추천 코디",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                Text(
                     text = "옷장 데이터를 기반으로 추천을 준비하고 있습니다.",
                     color = FitGhostColors.TextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
@@ -281,24 +295,77 @@ private fun OutfitRecommendationSection(
                 )
             }
             else -> {
-                outfits.forEachIndexed { index, outfit ->
-                    HomeOutfitCard(
-                        outfit = outfit,
-                        index = index + 1,
-                        onViewShop = onViewShop
-                    )
+                // 옷장 기반 추천과 검색 기반 추천 분리
+                val wardrobeBasedOutfits = outfits.filter { it.items.isNotEmpty() }
+                val searchBasedOutfits = outfits.filter { it.items.isEmpty() }
+                
+                // 옷장 아이템 기반 추천 (옷장 아이템이 있는 경우)
+                if (wardrobeBasedOutfits.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            text = "내 옷장 기반 추천 코디",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = FitGhostColors.TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                        wardrobeBasedOutfits.forEachIndexed { index, outfit ->
+                            WardrobeBasedOutfitCard(
+                                outfit = outfit,
+                                index = index + 1,
+                                onViewShop = onViewShop
+                            )
+                        }
+                    }
+                }
+                
+                // 검색 기반 추천 (옷장 아이템이 부족한 경우)
+                if (searchBasedOutfits.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // 옷장 기반 추천이 없을 때만 제목 표시
+                        if (wardrobeBasedOutfits.isEmpty()) {
+                            Text(
+                                text = "선선한 날씨에 어울리는 추천",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = FitGhostColors.TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                        } else {
+                            Text(
+                                text = "추가 상품 추천",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = FitGhostColors.TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                        }
+                        searchBasedOutfits.forEachIndexed { index, outfit ->
+                            SearchBasedOutfitCard(
+                                outfit = outfit,
+                                index = index + 1,
+                                weather = weather,
+                                onViewShop = onViewShop
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * 옷장 기반 추천 코디 카드
+ */
 @Composable
-private fun HomeOutfitCard(
+private fun WardrobeBasedOutfitCard(
     outfit: HomeOutfitRecommendation,
     index: Int,
     onViewShop: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    
     Card(
         modifier = Modifier.fillMaxWidth().softClayInset(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
@@ -308,6 +375,7 @@ private fun HomeOutfitCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 헤더
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -339,67 +407,114 @@ private fun HomeOutfitCard(
                 }
             }
 
+            // 옷장 아이템 이미지 그리드
             if (outfit.items.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "옷장 아이템",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = FitGhostColors.TextSecondary
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        outfit.items.forEach { item ->
-                            AssistChip(
-                                onClick = {},
-                                label = { Text(item.name) },
-                                leadingIcon = {
-                                    if (item.favorite) {
-                                        Icon(Icons.Outlined.CheckCircle, contentDescription = null)
-                                    }
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = FitGhostColors.BgSecondary,
-                                    labelColor = FitGhostColors.TextPrimary
-                                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "내 옷장 아이템",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = FitGhostColors.TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${outfit.items.size}개",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = FitGhostColors.TextSecondary
+                        )
+                    }
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(outfit.items.size) { idx ->
+                            val item = outfit.items[idx]
+                            WardrobeItemImageCard(
+                                imageUri = item.imageUri,
+                                name = item.name,
+                                color = item.color,
+                                isFavorite = item.favorite,
+                                onClick = { /* 옷장 아이템은 클릭 불가 */ }
                             )
                         }
                     }
                 }
             }
 
+            // 추천 상품 이미지 그리드
+            if (outfit.complementaryProducts.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "어울리는 상품",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = FitGhostColors.TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${outfit.complementaryProducts.size}개",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = FitGhostColors.TextSecondary
+                        )
+                    }
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(outfit.complementaryProducts.size) { idx ->
+                            val product = outfit.complementaryProducts[idx]
+                            ProductImageCard(
+                                imageUrl = product.imageUrl,
+                                name = product.name,
+                                price = product.price,
+                                onClick = {
+                                    openProductUrl(context, product.shopUrl)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 스타일 팁
             if (outfit.styleTips.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "스타일 가이드",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = FitGhostColors.TextSecondary
+                        style = MaterialTheme.typography.titleMedium,
+                        color = FitGhostColors.TextPrimary,
+                        fontWeight = FontWeight.Bold
                     )
-                    outfit.styleTips.take(2).forEach { tip ->
-                        Text(
-                            text = "• $tip",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = FitGhostColors.TextPrimary
-                        )
+                    outfit.styleTips.take(3).forEach { tip ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = FitGhostColors.AccentPrimary
+                            )
+                            Text(
+                                text = tip,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = FitGhostColors.TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
 
-            if (outfit.complementaryProducts.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "추천 상품",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = FitGhostColors.TextSecondary
-                    )
-                    outfit.complementaryProducts.take(2).forEach { product ->
-                        Text(
-                            text = "• ${product.name} ${product.price.takeIf { it > 0 }?.formatAsCurrency().orEmpty()}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = FitGhostColors.TextPrimary
-                        )
-                    }
-                }
-            }
-
+            // 상점 보기 버튼
             FilledTonalButton(
                 onClick = { onViewShop(outfit.shopQuery) },
                 modifier = Modifier.fillMaxWidth(),
@@ -411,7 +526,262 @@ private fun HomeOutfitCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("상점에서 보기")
+                Text("더 많은 상품 보기")
+            }
+        }
+    }
+}
+
+/**
+ * 검색 기반 추천 카드
+ */
+@Composable
+private fun SearchBasedOutfitCard(
+    outfit: HomeOutfitRecommendation,
+    index: Int,
+    weather: WeatherSnapshot?,
+    onViewShop: (String) -> Unit
+) {
+    val context = LocalContext.current
+    
+    // 날씨 기반 이모지 선택
+    val weatherEmoji = getWeatherEmojiFromTemp(weather?.tempC ?: 20.0)
+    
+    Card(
+        modifier = Modifier.fillMaxWidth().softClayInset(),
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 헤더
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(FitGhostColors.AccentPrimary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = weatherEmoji,
+                        style = MaterialTheme.typography.displaySmall
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = outfit.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = FitGhostColors.TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = outfit.subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = FitGhostColors.TextSecondary
+                    )
+                }
+            }
+
+            // 추천 상품 이미지 그리드
+            if (outfit.complementaryProducts.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(outfit.complementaryProducts.size) { idx ->
+                        val product = outfit.complementaryProducts[idx]
+                        ProductImageCard(
+                            imageUrl = product.imageUrl,
+                            name = product.name,
+                            price = product.price,
+                            onClick = {
+                                openProductUrl(context, product.shopUrl)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 상점 보기 버튼
+            FilledTonalButton(
+                onClick = { onViewShop(outfit.shopQuery) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(
+                    text = "🛍️",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text("더 많은 상품 보기")
+            }
+        }
+    }
+}
+
+/**
+ * 옷장 아이템 이미지 카드
+ */
+@Composable
+private fun WardrobeItemImageCard(
+    imageUri: String?,
+    name: String,
+    color: String?,
+    isFavorite: Boolean,
+    onClick: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .height(160.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+        onClick = onClick
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 이미지
+            if (!imageUri.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(imageUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = name,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // 플레이스홀더
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .background(FitGhostColors.BgTertiary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = name.take(2).uppercase(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = FitGhostColors.TextSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            // 즐겨찾기 배지
+            if (isFavorite) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = "즐겨찾기",
+                    tint = FitGhostColors.AccentPrimary,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(20.dp)
+                        .align(Alignment.TopEnd)
+                )
+            }
+            
+            // 하단 정보
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .background(FitGhostColors.BgSecondary.copy(alpha = 0.95f))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!color.isNullOrBlank()) {
+                    Text(
+                        text = color,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = FitGhostColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 상품 이미지 카드
+ */
+@Composable
+private fun ProductImageCard(
+    imageUrl: String,
+    name: String,
+    price: Int,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    
+    Card(
+        modifier = Modifier
+            .width(120.dp)
+            .height(160.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+        onClick = onClick
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 이미지
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = name,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                contentScale = ContentScale.Crop
+            )
+            
+            // 하단 정보
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .background(FitGhostColors.BgSecondary.copy(alpha = 0.95f))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (price > 0) {
+                    Text(
+                        text = price.formatAsCurrency(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = FitGhostColors.AccentPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -432,6 +802,22 @@ private fun Int.formatAsCurrency(): String {
     }.getOrElse { "${this}원" }
 }
 
+/**
+ * 상품 URL 열기
+ */
+private fun openProductUrl(context: android.content.Context, url: String) {
+    try {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "상품 페이지를 열 수 없습니다.",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
 @Composable
 private fun SettingsDialog(
     modelManager: com.fitghost.app.ai.ModelManager,
@@ -442,6 +828,9 @@ private fun SettingsDialog(
     val scope = rememberCoroutineScope()
     var isDeleting by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    // 성별 상태
+    val genderFlow = remember { com.fitghost.app.data.settings.UserSettings.genderFlow(context) }
+    val currentGender by genderFlow.collectAsState(initial = null)
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -457,6 +846,67 @@ private fun SettingsDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 성별 설정 섹션
+                Text(
+                    text = "개인화 설정",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = FitGhostColors.TextPrimary
+                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "성별",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = FitGhostColors.TextSecondary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val selectedMale = currentGender == com.fitghost.app.data.settings.UserSettings.Gender.MALE
+                            val selectedFemale = currentGender == com.fitghost.app.data.settings.UserSettings.Gender.FEMALE
+                            AssistChip(
+                                onClick = {
+                                    scope.launch {
+                                        com.fitghost.app.data.settings.UserSettings.setGender(
+                                            context,
+                                            com.fitghost.app.data.settings.UserSettings.Gender.MALE
+                                        )
+                                    }
+                                },
+                                label = { Text("남성") },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = if (selectedMale) FitGhostColors.AccentPrimary.copy(alpha = 0.15f) else FitGhostColors.BgPrimary
+                                )
+                            )
+                            AssistChip(
+                                onClick = {
+                                    scope.launch {
+                                        com.fitghost.app.data.settings.UserSettings.setGender(
+                                            context,
+                                            com.fitghost.app.data.settings.UserSettings.Gender.FEMALE
+                                        )
+                                    }
+                                },
+                                label = { Text("여성") },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = if (selectedFemale) FitGhostColors.AccentPrimary.copy(alpha = 0.15f) else FitGhostColors.BgPrimary
+                                )
+                            )
+                        }
+                        Text(
+                            text = "성별 정보는 AI 기반 추천에 사용됩니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FitGhostColors.TextTertiary
+                        )
+                    }
+                }
+
                 // AI 모델 관리 섹션
                 Text(
                     text = "AI 모델 관리",
@@ -794,5 +1244,21 @@ private fun ModelDownloadBanner(
                 }
             }
         }
+    }
+}
+
+/**
+ * 온도 기반 이모지 선택
+ */
+private fun getWeatherEmojiFromTemp(tempC: Double): String {
+    return when {
+        tempC <= 0 -> "🥶"      // 매우 추운 날씨
+        tempC <= 5 -> "❄️"      // 추운 날씨
+        tempC <= 10 -> "🧥"     // 쌀쌀한 날씨
+        tempC <= 15 -> "🍂"     // 선선한 날씨
+        tempC <= 20 -> "🌤️"     // 온화한 날씨
+        tempC <= 25 -> "☀️"     // 따뜻한 날씨
+        tempC <= 30 -> "🌞"     // 더운 날씨
+        else -> "🔥"           // 매우 더운 날씨
     }
 }

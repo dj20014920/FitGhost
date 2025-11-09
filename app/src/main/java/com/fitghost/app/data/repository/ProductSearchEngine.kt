@@ -22,6 +22,7 @@ object ProductSearchEngine {
     suspend fun search(
         query: String,
         maxResults: Int = 20,
+        randomSeed: Long? = null, // 다양성을 위한 랜덤 시드
         naverApi: NaverApi = SearchApiClient.naverApi,
         googleApi: GoogleCseApi = SearchApiClient.googleApi
     ): List<Product> {
@@ -34,9 +35,15 @@ object ProductSearchEngine {
 
                 val combined = (naverDeferred.await() + googleDeferred.await())
                     .distinctBy { it.shopUrl }
-                    .sortedByDescending { it.price }
-                    .take(maxResults)
-                combined
+                
+                // 랜덤 시드가 있으면 셔플, 없으면 가격순 정렬
+                val sorted = if (randomSeed != null) {
+                    combined.shuffled(kotlin.random.Random(randomSeed))
+                } else {
+                    combined.sortedByDescending { it.price }
+                }
+                
+                sorted.take(maxResults)
             }
         } catch (e: Exception) {
             Log.e(TAG, "search failed for: $query", e)

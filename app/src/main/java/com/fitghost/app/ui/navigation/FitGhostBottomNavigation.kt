@@ -93,15 +93,16 @@ fun FitGhostBottomNavigation(
                     },
                     selected = isSelected,
                     onClick = {
-                        if (currentRoute != destination.route) {
-                            navController.navigate(destination.route) {
-                                // 하단 네비게이션은 스택을 쌓지 않음
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                        // 항상 네비게이션 수행 (launchSingleTop이 중복 방지)
+                        navController.navigate(destination.route) {
+                            // 시작 destination(Home)까지 모든 백스택 정리
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
                             }
+                            // 같은 destination을 여러 번 추가하지 않음
+                            launchSingleTop = true
+                            // 이전에 저장된 상태 복원
+                            restoreState = true
                         }
                     },
                     colors = NavigationBarItemDefaults.colors(

@@ -7,7 +7,6 @@ sealed class FitGhostDestination(val route: String) {
     object Wardrobe : FitGhostDestination("wardrobe")
     object WardrobeAdd : FitGhostDestination("wardrobe_add")
     object Shop : FitGhostDestination("shop")
-    object Cart : FitGhostDestination("cart")
     object Gallery : FitGhostDestination("gallery")
 }
 

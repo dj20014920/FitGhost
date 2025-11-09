@@ -15,6 +15,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.fitghost.app.data.model.OutfitRecommendation
 import com.fitghost.app.data.model.Product
 import com.fitghost.app.ui.components.SoftClayButton
@@ -108,6 +112,8 @@ private fun RecommendationProductItem(
     onToggleWishlist: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -120,7 +126,7 @@ private fun RecommendationProductItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 상품 이미지 placeholder
+            // 상품 이미지
             Box(
                 modifier = Modifier
                     .size(64.dp)
@@ -128,12 +134,24 @@ private fun RecommendationProductItem(
                     .background(FitGhostColors.BgTertiary),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Checkroom,
-                    contentDescription = null,
-                    tint = FitGhostColors.TextTertiary,
-                    modifier = Modifier.size(24.dp)
-                )
+                if (product.imageUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(product.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = product.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Checkroom,
+                        contentDescription = null,
+                        tint = FitGhostColors.TextTertiary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
             
             // 상품 정보
@@ -220,6 +238,8 @@ fun ProductCard(
     onToggleWishlist: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -234,7 +254,7 @@ fun ProductCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 상품 이미지 placeholder
+            // 상품 이미지
             Box(
                 modifier = Modifier
                     .size(80.dp)
@@ -242,12 +262,24 @@ fun ProductCard(
                     .background(FitGhostColors.BgTertiary),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Checkroom,
-                    contentDescription = null,
-                    tint = FitGhostColors.TextTertiary,
-                    modifier = Modifier.size(32.dp)
-                )
+                if (product.imageUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(product.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = product.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Checkroom,
+                        contentDescription = null,
+                        tint = FitGhostColors.TextTertiary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
             
             // 상품 정보

@@ -39,6 +39,7 @@ class HomeViewModel(
             longitude = longitude,
             outfitLimit = 6
         )
+        // 새로고침 시마다 다른 결과를 위해 시간 기반 시드 사용
         requestRecommendations(lastParams)
     }
 
@@ -84,7 +85,9 @@ class HomeViewModelFactory(
                 weatherRepo = weatherRepo,
                 productSearchDataSource = object : RecommendationService.ProductSearchDataSource {
                     override suspend fun searchProducts(query: String, limit: Int): List<Product> {
-                        return ProductSearchEngine.search(query, maxResults = limit)
+                        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(appContext)
+                        val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+                        return ProductSearchEngine.search(enrichedQuery, maxResults = limit)
                     }
                 }
             )

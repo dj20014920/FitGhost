@@ -253,7 +253,9 @@ class ShopViewModel(
                 val result = shopRepository.getAIRecommendations(userMessage, context)
                 result.fold(
                     onSuccess = { recommendation ->
-                        _aiRecommendations.value = listOf(recommendation)
+                        // AI 추천 받은 후 실제 상품 검색
+                        val enrichedRecommendation = enrichRecommendationWithProducts(recommendation)
+                        _aiRecommendations.value = listOf(enrichedRecommendation)
                         _events.emit(ShopUiEvent.Snackbar("AI 추천이 완료되었습니다!"))
                     },
                     onFailure = { exception ->
@@ -266,6 +268,29 @@ class ShopViewModel(
                 _isAiLoading.value = false
             }
         }
+    }
+    
+    /** AI 추천에 실제 상품 정보 추가 */
+    private suspend fun enrichRecommendationWithProducts(recommendation: FashionRecommendation): FashionRecommendation {
+        val allProducts = mutableListOf<Product>()
+        
+        // 각 추천 아이템에 대해 상품 검색
+        recommendation.recommendedItems.forEach { item ->
+            val searchQuery = item.searchKeywords.joinToString(" ").ifBlank { 
+                "${item.color ?: ""} ${item.description}".trim() 
+            }
+            
+            if (searchQuery.isNotBlank()) {
+                try {
+                    val products = shopRepository.searchProducts(searchQuery)
+                    allProducts.addAll(products.take(3)) // 각 아이템당 최대 3개 상품
+                } catch (e: Exception) {
+                    android.util.Log.e("ShopViewModel", "상품 검색 실패: $searchQuery", e)
+                }
+            }
+        }
+        
+        return recommendation.copy(products = allProducts.distinctBy { it.shopUrl }.take(10))
     }
 
     /** 스타일 분석 요청 */
@@ -281,7 +306,8 @@ class ShopViewModel(
                 val result = shopRepository.analyzeStyle(userMessage, context)
                 result.fold(
                     onSuccess = { analysis ->
-                        _aiRecommendations.value = listOf(analysis)
+                        val enrichedAnalysis = enrichRecommendationWithProducts(analysis)
+                        _aiRecommendations.value = listOf(enrichedAnalysis)
                         _events.emit(ShopUiEvent.Snackbar("스타일 분석이 완료되었습니다!"))
                     },
                     onFailure = { exception ->
@@ -316,7 +342,8 @@ class ShopViewModel(
                 val result = shopRepository.matchOutfit(userMessage, context)
                 result.fold(
                     onSuccess = { matching ->
-                        _aiRecommendations.value = listOf(matching)
+                        val enrichedMatching = enrichRecommendationWithProducts(matching)
+                        _aiRecommendations.value = listOf(enrichedMatching)
                         _events.emit(ShopUiEvent.Snackbar("코디 매칭이 완료되었습니다!"))
                     },
                     onFailure = { exception ->

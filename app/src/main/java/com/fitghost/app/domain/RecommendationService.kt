@@ -61,15 +61,24 @@ class RecommendationService(
         val weather = resolveWeather(params)
         val wardrobe = wardrobeRepository.observeAll().first()
 
+        // 날짜 + 시간(10분 단위) 기반 시드로 새로고침 시 다양성 확보
+        val currentTime = System.currentTimeMillis()
+        val dailySeed = currentTime / (24 * 60 * 60 * 1000) // 날짜
+        val timeSeed = (currentTime / (10 * 60 * 1000)) % 144 // 10분 단위 (하루 144개 슬롯)
+        val combinedSeed = dailySeed * 1000 + timeSeed
+        
         val plans = outfitRecommender.recommend(
             weather = weather,
             wardrobe = wardrobe,
-            maxOutfits = params.outfitLimit
+            maxOutfits = params.outfitLimit,
+            dailySeed = combinedSeed
         )
 
         val outfits = if (plans.isNotEmpty()) {
-            plans.take(3).map { plan ->
-                val complementary = fetchComplementaryProducts(plan, limit = 4)
+            plans.take(3).mapIndexed { index, plan ->
+                // 각 추천마다 다른 시드 사용하여 다양한 상품 표시
+                val searchSeed = dailySeed * 1000 + index
+                val complementary = fetchComplementaryProducts(plan, limit = 4, searchSeed = searchSeed)
                 HomeOutfitRecommendation(
                     id = plan.id,
                     title = plan.title,
@@ -82,7 +91,7 @@ class RecommendationService(
                 )
             }
         } else {
-            fallbackHomeRecommendations(weather)
+            fallbackHomeRecommendations(weather, dailySeed)
         }
 
         HomeRecommendationResult(
@@ -97,15 +106,20 @@ class RecommendationService(
         val weather = resolveWeather(params)
         val wardrobe = wardrobeRepository.observeAll().first()
 
+        // 날짜 기반 시드 생성
+        val dailySeed = System.currentTimeMillis() / (24 * 60 * 60 * 1000)
+        
         val plans = outfitRecommender.recommend(
             weather = weather,
             wardrobe = wardrobe,
-            maxOutfits = params.outfitLimit
+            maxOutfits = params.outfitLimit,
+            dailySeed = dailySeed
         )
 
         if (plans.isNotEmpty()) {
-            plans.take(params.outfitLimit).map { plan ->
-                val complementary = fetchComplementaryProducts(plan, limit = 6)
+            plans.take(params.outfitLimit).mapIndexed { index, plan ->
+                val searchSeed = dailySeed * 1000 + index + 100
+                val complementary = fetchComplementaryProducts(plan, limit = 6, searchSeed = searchSeed)
                 OutfitRecommendation(
                     id = plan.id,
                     title = plan.title,
@@ -116,7 +130,7 @@ class RecommendationService(
                 )
             }
         } else {
-            fallbackShopRecommendations(weather)
+            fallbackShopRecommendations(weather, dailySeed)
         }
     }
 
@@ -160,15 +174,23 @@ class RecommendationService(
 
     private suspend fun fetchComplementaryProducts(
         plan: OutfitPlan,
-        limit: Int
+        limit: Int,
+        searchSeed: Long = System.currentTimeMillis() // 검색 다양성을 위한 시드
     ): List<Product> {
         val queries = buildSearchQueries(plan)
         if (queries.isEmpty()) return emptyList()
 
         val results = mutableListOf<Product>()
-        for (query in queries) {
-            if (results.size >= limit) break
-            val products = productSearchDataSource.searchProducts(query, limit = limit)
+        
+        // 각 검색어마다 다른 시드 사용하여 다양한 결과 확보
+        queries.forEachIndexed { index, query ->
+            if (results.size >= limit) return@forEachIndexed
+            
+            val products = productSearchDataSource.searchProducts(
+                query, 
+                limit = limit
+            )
+            
             for (product in products) {
                 if (results.none { it.id == product.id }) {
                     results += product
@@ -176,43 +198,104 @@ class RecommendationService(
                 if (results.size >= limit) break
             }
         }
-        return results.take(limit)
+        
+        // 최종 결과를 시드 기반으로 셔플하여 다양성 추가
+        return results
+            .shuffled(kotlin.random.Random(searchSeed))
+            .take(limit)
     }
 
     private fun buildSearchQueries(plan: OutfitPlan): List<String> {
         val queries = mutableListOf<String>()
-        plan.mainPieces.firstOrNull()?.let {
-            queries += buildQueryForItem(it)
+        
+        // 메인 아이템들로부터 다양한 검색어 생성
+        plan.mainPieces.firstOrNull()?.let { item ->
+            queries += buildVariedQueriesForItem(item)
         }
-        plan.outerLayer?.let { queries += buildQueryForItem(it) }
-        if (queries.isEmpty()) {
-            plan.mainPieces.drop(1).firstOrNull()?.let { queries += buildQueryForItem(it) }
+        
+        // 아우터가 있으면 추가
+        plan.outerLayer?.let { item ->
+            queries += buildVariedQueriesForItem(item)
         }
-        return queries.distinct()
+        
+        // 검색어가 부족하면 두 번째 메인 아이템 사용
+        if (queries.size < 3) {
+            plan.mainPieces.drop(1).firstOrNull()?.let { item ->
+                queries += buildVariedQueriesForItem(item)
+            }
+        }
+        
+        return queries.distinct().take(5) // 최대 5개의 다양한 검색어
     }
 
-    private fun buildQueryForItem(item: WardrobeItemEntity): String {
-        val builder = StringBuilder()
-        item.color?.let { builder.append(it).append(" ") }
-        builder.append(item.name)
-        if (item.tags.isNotEmpty()) {
-            builder.append(" ")
-            builder.append(item.tags.first())
+    /**
+     * 하나의 아이템으로부터 여러 검색어 조합 생성
+     */
+    private fun buildVariedQueriesForItem(item: WardrobeItemEntity): List<String> {
+        val queries = mutableListOf<String>()
+        val name = item.name
+        val color = item.color
+        val tags = item.tags
+        
+        // 1. 기본: 이름만
+        queries += name
+        
+        // 2. 색상 + 이름
+        if (!color.isNullOrBlank()) {
+            queries += "$color $name"
         }
-        return builder.toString().trim()
+        
+        // 3. 이름 + 첫 번째 태그
+        if (tags.isNotEmpty()) {
+            queries += "$name ${tags.first()}"
+        }
+        
+        // 4. 색상 + 이름 + 태그 (전체 조합)
+        if (!color.isNullOrBlank() && tags.isNotEmpty()) {
+            queries += "$color $name ${tags.first()}"
+        }
+        
+        // 5. 카테고리 기반 일반 검색어
+        queries += getCategoryBasedQuery(item.category)
+        
+        return queries.distinct()
+    }
+    
+    /**
+     * 카테고리별 일반적인 검색어 생성
+     */
+    private fun getCategoryBasedQuery(category: com.fitghost.app.data.db.WardrobeCategory): String {
+        return when (category) {
+            com.fitghost.app.data.db.WardrobeCategory.TOP -> "티셔츠"
+            com.fitghost.app.data.db.WardrobeCategory.BOTTOM -> "팬츠"
+            com.fitghost.app.data.db.WardrobeCategory.OUTER -> "재킷"
+            com.fitghost.app.data.db.WardrobeCategory.SHOES -> "스니커즈"
+            com.fitghost.app.data.db.WardrobeCategory.ACCESSORY -> "악세서리"
+            else -> "패션"
+        }
     }
 
     private fun buildPrimaryQuery(plan: OutfitPlan, products: List<Product>): String {
-        return plan.mainPieces.firstOrNull()?.let { buildQueryForItem(it) }
-            ?: products.firstOrNull()?.name
-            ?: "패션 추천"
+        return plan.mainPieces.firstOrNull()?.let { item ->
+            // 간단한 검색어 생성
+            val color = item.color
+            val name = item.name
+            if (!color.isNullOrBlank()) "$color $name" else name
+        } ?: products.firstOrNull()?.name ?: "패션 추천"
     }
 
-    private suspend fun fallbackHomeRecommendations(weather: WeatherSnapshot): List<HomeOutfitRecommendation> {
+    private suspend fun fallbackHomeRecommendations(
+        weather: WeatherSnapshot,
+        dailySeed: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000)
+    ): List<HomeOutfitRecommendation> {
         val queries = defaultQueriesFor(weather)
         val outfits = mutableListOf<HomeOutfitRecommendation>()
         queries.forEachIndexed { index, query ->
+            val searchSeed = dailySeed * 1000 + index + 500
             val products = productSearchDataSource.searchProducts(query, limit = 4)
+                .shuffled(kotlin.random.Random(searchSeed))
+                .take(4)
+            
             if (products.isNotEmpty()) {
                 outfits += HomeOutfitRecommendation(
                     id = "fallback_$index",
@@ -229,11 +312,18 @@ class RecommendationService(
         return outfits.take(3)
     }
 
-    private suspend fun fallbackShopRecommendations(weather: WeatherSnapshot): List<OutfitRecommendation> {
+    private suspend fun fallbackShopRecommendations(
+        weather: WeatherSnapshot,
+        dailySeed: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000)
+    ): List<OutfitRecommendation> {
         val queries = defaultQueriesFor(weather)
         val recommendations = mutableListOf<OutfitRecommendation>()
         queries.forEachIndexed { index, query ->
+            val searchSeed = dailySeed * 1000 + index + 200
             val products = productSearchDataSource.searchProducts(query, limit = 6)
+                .shuffled(kotlin.random.Random(searchSeed))
+                .take(6)
+            
             if (products.isNotEmpty()) {
                 recommendations += OutfitRecommendation(
                     id = "fallback_$index",

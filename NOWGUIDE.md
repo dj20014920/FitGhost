@@ -35,7 +35,239 @@
   - 단일 ABI만 빌드하면 디버그 빌드 시간이 크게 줄어듭니다. 디바이스(또는 에뮬레이터) 아키텍처에 맞춰 선택하세요.
 
 
-## 🔁 NOWGUIDE 최신 동기화 (2025-11-04 - Retrofit Moshi 통합 완료)
+## 🔁 NOWGUIDE 최신 동기화 (2025-11-04 - 날씨 기반 코디 추천 완성)
+
+### 📊 날씨 기반 코디 추천 시스템 상세 플로우
+
+#### 🌡️ 전체 아키텍처
+
+```
+사용자 위치 → 날씨 API → 옷장 데이터 → AI 분석 → 코디 생성 → 상품 검색 → UI 표시
+```
+
+#### 1️⃣ 날씨 데이터 수집 (WeatherRepo)
+
+**API**: Open-Meteo (https://api.open-meteo.com/)
+- 무료, 인증 불필요
+- 실시간 날씨 데이터 제공
+
+**수집 데이터**:
+```kotlin
+data class WeatherSnapshot(
+    val tempC: Double,    // 기온 (섭씨)
+    val windKph: Double   // 풍속 (km/h)
+)
+```
+
+**위치 정보**:
+- 위치 권한 있음: GPS 기반 실시간 위치
+- 위치 권한 없음: 서울 기본값 (37.5665, 126.9780)
+
+#### 2️⃣ 옷장 아이템 분석 (OutfitRecommender)
+
+**분석 알고리즘**:
+
+1. **온도 기반 점수 계산**
+   - 0°C 이하: 패딩, 기모 등 보온성 높은 아이템 우선
+   - 0-10°C: 울 코트, 니트 등 따뜻한 소재
+   - 10-18°C: 셔츠 자켓, 데님 등 중간 소재
+   - 18-24°C: 린넨, 치노 등 가벼운 소재
+   - 24°C 이상: 반팔, 와이드 팬츠 등 시원한 소재
+
+2. **바람 기반 점수 계산**
+   - 풍속 28km/h 이상: 아우터 필수 권장
+   - 방풍 소재 아이템 점수 가산
+
+3. **아이템 속성 분석**
+   ```kotlin
+   // 키워드 기반 태그 분석
+   - warmKeywords: "패딩", "기모", "울", "니트", "플리스"
+   - coolKeywords: "린넨", "반팔", "민소매", "메시"
+   - layerKeywords: "가디건", "자켓", "코트"
+   - sportyKeywords: "스포츠", "트레이닝", "러닝"
+   - formalKeywords: "정장", "슈트", "블레이저"
+   ```
+
+4. **색상 조화 점수**
+   - 상의/하의 색상 조합 분석
+   - 조화로운 조합 시 점수 가산
+
+5. **즐겨찾기 보너스**
+   - 즐겨찾기 아이템: +0.4점
+
+#### 3️⃣ 코디 조합 생성
+
+**조합 로직**:
+```
+상의(Top 5) × 하의(Top 5) × 아우터(필요시) × 신발(선택) × 악세서리(2개)
+→ 최대 수백 개 조합 생성 → 점수순 정렬 → 상위 10개 선택
+```
+
+**코디 구성**:
+- mainPieces: 상의 + 하의
+- outerLayer: 아우터 (날씨에 따라 선택)
+- shoes: 신발
+- accessories: 악세서리 (최대 2개)
+- styleTips: AI 생성 스타일 가이드
+
+#### 4️⃣ 보완 상품 검색
+
+**검색 엔진**: 네이버 쇼핑 API + 구글 커스텀 검색
+- Cloudflare Workers 프록시를 통한 API 키 보안
+
+**검색 쿼리 생성**:
+```kotlin
+// 예시: "블랙 청바지" 아이템 기반
+쿼리 = "${아이템.색상} ${아이템.이름} ${아이템.태그[0]}"
+→ "블랙 청바지 스키니"
+```
+
+**검색 결과**:
+- 각 코디당 4-6개 보완 상품
+- 이미지 URL, 가격, 상점 정보 포함
+
+#### 5️⃣ AI 모델 활용 (선택적)
+
+**온디바이스 모델**: LFM2-1.2B-Q4_0.gguf
+- 크기: 664MB
+- 용도: 옷장 아이템 자동 완성, 태그 생성
+- 다운로드: Cloudflare R2 CDN
+
+**클라우드 모델**: Gemini 2.5 Flash Lite
+- 용도: 이미지 기반 의류 태깅
+- API: Google Generative AI
+- 프록시: Cloudflare Workers
+
+#### 6️⃣ UI 표시 로직
+
+**추천 분류 기준**:
+```kotlin
+// 옷장 아이템 충분 여부 판단
+if (outfit.items.isNotEmpty()) {
+    // "내 옷장 기반 추천 코디"
+    WardrobeBasedOutfitCard
+} else {
+    // "추가 상품 추천" or "오늘의 추천 상품"
+    SearchBasedOutfitCard
+}
+```
+
+**표시 내용**:
+1. **옷장 기반 추천**
+   - 내 옷장 아이템 이미지 그리드
+   - 어울리는 상품 이미지 그리드 (클릭 → 구매 페이지)
+   - 스타일 가이드 (최대 3개)
+
+2. **검색 기반 추천**
+   - 추천 상품 이미지 그리드 (클릭 → 구매 페이지)
+   - "옷장 아이템이 부족해 외부 추천을 제안합니다." 안내
+
+#### 🔄 전체 데이터 플로우
+
+```
+1. HomeScreen.requestRecommendations()
+   ↓
+2. HomeViewModel.refresh(lat, lon)
+   ↓
+3. RecommendationService.getHomeRecommendations()
+   ↓
+4. WeatherRepo.getCurrent(lat, lon)
+   → Open-Meteo API 호출
+   → WeatherSnapshot 반환
+   ↓
+5. WardrobeRepository.observeAll()
+   → Room DB에서 옷장 아이템 조회
+   ↓
+6. OutfitRecommender.recommend(weather, wardrobe)
+   → 아이템별 점수 계산
+   → 조합 생성 및 정렬
+   → OutfitPlan 리스트 반환
+   ↓
+7. fetchComplementaryProducts(plan)
+   → 검색 쿼리 생성
+   → ProductSearchEngine.search()
+   → 네이버/구글 API 호출
+   → Product 리스트 반환
+   ↓
+8. HomeOutfitRecommendation 생성
+   → items: 옷장 아이템 요약
+   → complementaryProducts: 검색 상품
+   → styleTips: 스타일 가이드
+   ↓
+9. HomeScreen UI 렌더링
+   → 옷장 기반 / 검색 기반 분리
+   → 이미지 그리드 표시
+   → 클릭 이벤트 처리
+```
+
+#### 🎯 핵심 알고리즘 예시
+
+**날씨별 추천 로직**:
+```kotlin
+when {
+    tempC <= 0 -> {
+        // 매우 추운 날씨
+        - 보온성 높은 아이템 우선
+        - 아우터 필수
+        - 검색: "패딩 코트", "기모 슬랙스", "방한 부츠"
+    }
+    tempC <= 10 -> {
+        // 쌀쌀한 날씨
+        - 따뜻한 소재 우선
+        - 아우터 권장
+        - 검색: "울 코트", "니트 가디건", "방풍 재킷"
+    }
+    tempC <= 18 -> {
+        // 선선한 날씨
+        - 중간 소재
+        - 아우터 선택
+        - 검색: "셔츠 자켓", "데님 팬츠", "로퍼"
+    }
+    tempC <= 24 -> {
+        // 온화한 날씨
+        - 가벼운 소재
+        - 아우터 불필요
+        - 검색: "린넨 셔츠", "치노 팬츠", "스니커즈"
+    }
+    else -> {
+        // 무더운 날씨
+        - 시원한 소재 필수
+        - 아우터 제외
+        - 검색: "반팔 티셔츠", "와이드 팬츠", "샌들"
+    }
+}
+```
+
+#### 📦 사용 모델 및 API
+
+**AI 모델**:
+1. **LFM2-1.2B-Q4_0.gguf** (온디바이스)
+   - 크기: 664MB
+   - 양자화: Q4_0 (4-bit)
+   - 용도: 텍스트 자동 완성
+   - 다운로드: https://cdn.emozleep.space/models/
+
+2. **Gemini 2.5 Flash Lite** (클라우드)
+   - 제공: Google Generative AI
+   - 용도: 이미지 태깅, 의류 분석
+   - 입력: 1,048,576 토큰
+   - 출력: 65,536 토큰
+
+**외부 API**:
+1. **Open-Meteo Weather API**
+   - 엔드포인트: https://api.open-meteo.com/
+   - 인증: 불필요
+   - 용도: 실시간 날씨 데이터
+
+2. **네이버 쇼핑 검색 API**
+   - 프록시: Cloudflare Workers
+   - 용도: 상품 검색
+
+3. **구글 커스텀 검색 API**
+   - 프록시: Cloudflare Workers
+   - 용도: 이미지 기반 상품 검색
+
+---
 
 ### ✅ 최신 완료 사항 (2025-11-04) ⭐ 업데이트
 
@@ -71,14 +303,50 @@
   - 모든 파일 진단 통과 (No diagnostics found)
   - 날씨 API 호출 정상 작동 예상
 
+### ✅ 최신 완료 사항 (2025-11-09) 🚀
+
+#### 1. **Vertex AI 전환 완료** ✅ 100%
+- **전환 배경**
+  - 문제: Google AI Studio API의 지역 제한 ("User location is not supported for the API use")
+  - 원인: API 키 기반 인증 방식의 지리적 제약
+  - 해결: Vertex AI로 전환하여 엔터프라이즈급 안정성 확보
+
+- **Vertex AI 아키텍처**
+  - 인증: OAuth 2.0 Service Account (JWT RS256 서명)
+  - 엔드포인트: `us-central1-aiplatform.googleapis.com`
+  - 프로젝트: GCP Vertex AI 프로젝트
+  - 지역 제한: **완전 해결** (전 세계 어디서나 사용 가능)
+
+- **Cloudflare Workers 업데이트**
+  - OAuth 2.0 토큰 자동 생성 (유효기간 3600초)
+  - JWT 서명 구현 (Web Crypto API 사용)
+  - 환경 변수:
+    - `VERTEX_AI_SERVICE_ACCOUNT_KEY`: Service Account JSON (암호화된 시크릿)
+    - `VERTEX_AI_LOCATION`: us-central1 (서울 리전도 지원 가능)
+  - 엔드포인트 변경:
+    - `/proxy/gemini/tag` → Vertex AI Gemini Flash Lite
+    - `/proxy/gemini/generateContent` → Vertex AI Gemini Image
+
+- **검증 완료**
+  - ✅ Health Check: Vertex AI 연결 성공
+  - ✅ Auto-Tagging: 한국어 응답 정상 작동
+  - ✅ Image Generation: 멀티모달 지원 확인
+  - ✅ 모든 Android 호출 경로 정합성 검증 (6개 진입점)
+
+- **비용 효율성**
+  - 기존: Google AI Studio (무료 티어, 지역 제한)
+  - 변경: Vertex AI (사용량 기반 과금, 지역 제한 없음)
+  - 예상 비용: 월 $0.25 (1000회 태깅 기준)
+
 ### ✅ 이전 완료 사항 (2025-11-03) ⭐
 
-#### 1. **Gemini 2.5 Flash-Lite 완전 적용 및 검증** ✅ 100%
+#### 1. **Gemini 2.5 Flash-Lite 완전 적용 및 검증** ✅ 100% → Vertex AI로 전환됨 (2025-11-09)
 - **모델 업그레이드 완료**
   - 기존: `gemini-2.5-flash-lite` (v1beta) - 지역 제한 문제
-  - 변경: `gemini-2.5-flash-lite` (v1) - 정상 작동 확인 ✅
-  - API 버전: v1 (올바른 엔드포인트)
-  - 테스트 결과: HTTP 200, 이미지 태깅 성공
+  - 1차 변경: `gemini-2.5-flash-lite` (v1) - 여전히 지역 제한 존재
+  - 2차 변경: **Vertex AI** (v1) - 지역 제한 완전 해결 ✅
+  - API 버전: Vertex AI v1 (엔터프라이즈급 엔드포인트)
+  - 테스트 결과: HTTP 200, 이미지 태깅 성공, 지역 제한 없음
 
 - **Gemini 2.5 Flash-Lite 스펙**
   - 입력 토큰: 1,048,576 (약 100만)
@@ -133,38 +401,40 @@
   }
   ```
 
-#### 2. **Cloudflare Workers 프록시 서버 완전 작동 확인** ✅ 100%
-- **모든 API 키 등록 완료 및 테스트 성공**
-  - GEMINI_API_KEY: ✅ 검증 완료 (2025-11-03 업데이트)
-  - NANOBANANA_API_KEY: ✅
-  - NAVER_CLIENT_ID: `REDACTED_NAVER_CLIENT_ID` ✅
-  - NAVER_CLIENT_SECRET: `REDACTED_NAVER_CLIENT_SECRET` ✅
+#### 2. **Cloudflare Workers 프록시 서버 - Vertex AI 통합** ✅ 100%
+- **모든 인증 정보 등록 완료 및 테스트 성공**
+  - VERTEX_AI_SERVICE_ACCOUNT_KEY: ✅ Service Account JSON (2025-11-09 등록)
+  - VERTEX_AI_LOCATION: ✅ us-central1 (2025-11-09 설정)
+  - NAVER_CLIENT_ID: ✅
+  - NAVER_CLIENT_SECRET: ✅
   - GOOGLE_CSE_KEY: ✅
-  - GOOGLE_CSE_CX: `REDACTED_GOOGLE_CSE_CX` ✅
+  - GOOGLE_CSE_CX: ✅
 
 - **프록시 엔드포인트 테스트 결과**
-  - ✅ `/health`: API 키 유효성 검증 (신규 추가)
-  - ✅ `/proxy/gemini/tag`: 자동 태깅 (gemini-2.5-flash-lite)
-  - ✅ `/proxy/gemini/generateContent`: 가상 피팅
-  - ✅ `/proxy/naver/shop`: 네이버 쇼핑 검색 (34,289개 상품)
-  - ✅ `/proxy/google/cse`: 구글 커스텀 검색 (45억 개 결과)
+  - ✅ `/health`: Vertex AI 연결 상태 검증 (api_type: "vertex-ai")
+  - ✅ `/proxy/gemini/tag`: 자동 태깅 (Vertex AI gemini-2.5-flash-lite)
+  - ✅ `/proxy/gemini/generateContent`: 가상 피팅/이미지 생성 (Vertex AI)
+  - ✅ `/proxy/naver/shop`: 네이버 쇼핑 검색
+  - ✅ `/proxy/google/cse`: 구글 커스텀 검색
   - ✅ `/proxy/presign`: CDN URL 생성
 
 - **실제 테스트 명령**
   ```bash
-  # 헬스체크 (API 키 검증)
+  # Vertex AI 헬스체크
   curl https://fitghost-proxy.vinny4920-081.workers.dev/health
+  # 응답: {"status":"ok","api_type":"vertex-ai","vertex":{"status":"ok"}}
   
-  # 네이버 쇼핑 검색
-  curl 'https://fitghost-proxy.vinny4920-081.workers.dev/proxy/naver/shop?query=청바지&display=3'
-  
-  # 구글 검색
-  curl 'https://fitghost-proxy.vinny4920-081.workers.dev/proxy/google/cse?q=jeans&num=3'
+  # 자동 태깅 테스트
+  curl -X POST https://fitghost-proxy.vinny4920-081.workers.dev/proxy/gemini/tag \
+    -H "Content-Type: application/json" \
+    -d '{"contents":[{"role":"user","parts":[{"text":"테스트"}]}]}'
+  # 응답: 정상 (한국어 응답 포함)
   ```
 
 - **보안 강화**
   - API 키가 앱 바이너리에 포함되지 않음
   - Cloudflare Workers Secrets로 중앙 관리
+  - OAuth 2.0 토큰 자동 갱신 (3600초마다)
   - CORS 헤더 자동 추가
   - 모든 외부 API 호출이 프록시 경유
 

@@ -72,6 +72,9 @@ class ShopRepositoryImpl(
     companion object {
         private const val TAG = "ShopRepository"
     }
+    
+    // 캐시 매니저
+    private val cacheManager by lazy { com.fitghost.app.data.cache.CacheManager.getInstance(context) }
 
     private data class WishlistEntry(val product: Product, val savedAt: Long)
 
@@ -88,7 +91,9 @@ class ShopRepositoryImpl(
             weatherRepo = weatherRepo,
             productSearchDataSource = object : RecommendationService.ProductSearchDataSource {
                 override suspend fun searchProducts(query: String, limit: Int): List<Product> {
-                    return ProductSearchEngine.search(query, maxResults = limit)
+                    val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(context)
+                    val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+                    return ProductSearchEngine.search(enrichedQuery, maxResults = limit)
                 }
             }
         )
@@ -104,9 +109,104 @@ class ShopRepositoryImpl(
     override suspend fun searchProducts(query: String): List<Product> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
 
+        // 캐시 키 생성
+        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(context)
+        val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+        val cacheKey = cacheManager.generateKey("searchProducts", enrichedQuery)
+        
+        // 캐시 확인
+        val cached = cacheManager.get(cacheKey)
+        if (cached != null) {
+            return@withContext deserializeProductList(cached)
+        }
+
+        // API 호출
         val wishlistIds = getWishlistIds()
-        ProductSearchEngine.search(query)
+        val products = ProductSearchEngine.search(enrichedQuery)
             .map { product -> product.copy(isWishlisted = wishlistIds.contains(product.id)) }
+        
+        // 캐시 저장
+        cacheManager.put(cacheKey, serializeProductList(products))
+        
+        products
+    }
+    
+    /**
+     * Product 리스트 직렬화
+     */
+    private fun serializeProductList(products: List<Product>): String {
+        val jsonArray = JSONArray()
+        products.forEach { product ->
+            jsonArray.put(serializeProduct(product))
+        }
+        return jsonArray.toString()
+    }
+    
+    /**
+     * Product 리스트 역직렬화
+     */
+    private fun deserializeProductList(json: String): List<Product> {
+        val products = mutableListOf<Product>()
+        try {
+            val jsonArray = JSONArray(json)
+            for (i in 0 until jsonArray.length()) {
+                deserializeProduct(jsonArray.getJSONObject(i))?.let { products.add(it) }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize product list", e)
+        }
+        return products
+    }
+    
+    /**
+     * Product 직렬화 (JSON)
+     */
+    private fun serializeProduct(product: Product): JSONObject {
+        return JSONObject()
+            .put("id", product.id)
+            .put("name", product.name)
+            .put("price", product.price)
+            .put("imageUrl", product.imageUrl)
+            .put("category", product.category.name)
+            .put("shopName", product.shopName)
+            .put("shopUrl", product.shopUrl)
+            .put("description", product.description)
+            .put("source", product.source)
+            .put("tags", JSONArray(product.tags))
+            .put("isWishlisted", product.isWishlisted)
+    }
+    
+    /**
+     * Product 역직렬화 (JSON)
+     */
+    private fun deserializeProduct(json: JSONObject): Product? {
+        return try {
+            val tagsJson = json.optJSONArray("tags")
+            val tags = mutableListOf<String>()
+            if (tagsJson != null) {
+                for (i in 0 until tagsJson.length()) {
+                    tags.add(tagsJson.getString(i))
+                }
+            }
+            
+            Product(
+                id = json.getString("id"),
+                name = json.getString("name"),
+                price = json.getInt("price"),
+                imageUrl = json.getString("imageUrl"),
+                category = runCatching { ProductCategory.valueOf(json.getString("category")) }
+                    .getOrDefault(ProductCategory.OTHER),
+                shopName = json.getString("shopName"),
+                shopUrl = json.getString("shopUrl"),
+                description = json.getString("description"),
+                tags = tags,
+                isWishlisted = json.getBoolean("isWishlisted"),
+                source = json.getString("source")
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize product", e)
+            null
+        }
     }
 
     override suspend fun searchByImage(bitmap: Bitmap): Result<ImageSearchResult> = withContext(Dispatchers.IO) {
@@ -179,14 +279,88 @@ class ShopRepositoryImpl(
     }
 
     override suspend fun getRecommendations(): List<OutfitRecommendation> = withContext(Dispatchers.IO) {
+        // 캐시 키 생성
+        val cacheKey = cacheManager.generateKey("getRecommendations")
+        
+        // 캐시 확인
+        val cached = cacheManager.get(cacheKey)
+        if (cached != null) {
+            return@withContext deserializeRecommendationList(cached)
+        }
+        
+        // API 호출
         val wishlistIds = getWishlistIds()
-        recommendationService.getShopRecommendations().map { recommendation ->
+        val recommendations = recommendationService.getShopRecommendations().map { recommendation ->
             recommendation.copy(
                 recommendedProducts = recommendation.recommendedProducts.map { product ->
                     product.copy(isWishlisted = wishlistIds.contains(product.id))
                 }
             )
         }
+        
+        // 캐시 저장
+        cacheManager.put(cacheKey, serializeRecommendationList(recommendations))
+        
+        recommendations
+    }
+    
+    /**
+     * OutfitRecommendation 리스트 직렬화
+     */
+    private fun serializeRecommendationList(recommendations: List<OutfitRecommendation>): String {
+        val jsonArray = JSONArray()
+        recommendations.forEach { rec ->
+            val productsArray = JSONArray()
+            rec.recommendedProducts.forEach { product ->
+                productsArray.put(serializeProduct(product))
+            }
+            
+            jsonArray.put(
+                JSONObject()
+                    .put("id", rec.id)
+                    .put("title", rec.title)
+                    .put("description", rec.description)
+                    .put("matchingReason", rec.matchingReason)
+                    .put("baseGarmentId", rec.baseGarmentId)
+                    .put("score", rec.score)
+                    .put("recommendedProducts", productsArray)
+            )
+        }
+        return jsonArray.toString()
+    }
+    
+    /**
+     * OutfitRecommendation 리스트 역직렬화
+     */
+    private fun deserializeRecommendationList(json: String): List<OutfitRecommendation> {
+        val recommendations = mutableListOf<OutfitRecommendation>()
+        try {
+            val jsonArray = JSONArray(json)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val productsArray = obj.getJSONArray("recommendedProducts")
+                val products = mutableListOf<Product>()
+                
+                for (j in 0 until productsArray.length()) {
+                    deserializeProduct(productsArray.getJSONObject(j))?.let { products.add(it) }
+                }
+                
+                recommendations.add(
+                    OutfitRecommendation(
+                        id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                        title = obj.getString("title"),
+                        description = obj.optString("description", ""),
+                        recommendedProducts = products,
+                        baseGarmentId = obj.optString("baseGarmentId").takeIf { it.isNotEmpty() },
+                        matchingReason = obj.getString("matchingReason"),
+                        score = obj.optDouble("score", 0.0).toFloat()
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize recommendation list", e)
+        }
+        return recommendations
     }
 
     override suspend fun addToWishlist(product: Product) {
@@ -269,31 +443,192 @@ class ShopRepositoryImpl(
     // NanoBanana AI 기반 추천 기능 구현
     override suspend fun getAIRecommendations(prompt: String, context: NanoBananaContext?): Result<FashionRecommendation> {
         return try {
-            Log.d("ShopRepository", "Requesting AI recommendations with prompt: $prompt")
-            nanoBananaService.getFashionRecommendation(prompt, context)
+            // 캐시 키 생성 (컨텍스트 포함)
+            val contextStr = context?.let { 
+                "${it.userPreferences?.style}_${it.userPreferences?.colors?.joinToString()}_${it.wardrobeItems?.size}"
+            } ?: "no_context"
+            val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(this@ShopRepositoryImpl.context)
+            val promptWithGender = if (!genderTag.isNullOrBlank()) "[사용자 성별: $genderTag] $prompt" else prompt
+            val cacheKey = cacheManager.generateKey("getAIRecommendations", promptWithGender, contextStr)
+            
+            // 캐시 확인
+            val cached = cacheManager.get(cacheKey)
+            if (cached != null) {
+                val recommendation = deserializeFashionRecommendation(cached)
+                if (recommendation != null) {
+                    Log.d(TAG, "AI recommendation cache HIT")
+                    return Result.success(recommendation)
+                }
+            }
+            
+            // API 호출
+            Log.d(TAG, "Requesting AI recommendations with prompt: $promptWithGender")
+            val result = nanoBananaService.getFashionRecommendation(promptWithGender, context)
+            
+            // 성공 시 캐시 저장
+            result.onSuccess { recommendation ->
+                cacheManager.put(cacheKey, serializeFashionRecommendation(recommendation))
+            }
+            
+            result
         } catch (e: Exception) {
-            Log.e("ShopRepository", "Error getting AI recommendations", e)
+            Log.e(TAG, "Error getting AI recommendations", e)
             Result.failure(e)
         }
     }
     
     override suspend fun analyzeStyle(prompt: String, context: NanoBananaContext?): Result<FashionRecommendation> {
         return try {
-            Log.d("ShopRepository", "Requesting style analysis with prompt: $prompt")
-            nanoBananaService.analyzeStyle(prompt, context)
+            // 캐시 키 생성
+            val contextStr = context?.wardrobeItems?.size?.toString() ?: "no_context"
+            val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(this@ShopRepositoryImpl.context)
+            val promptWithGender = if (!genderTag.isNullOrBlank()) "[사용자 성별: $genderTag] $prompt" else prompt
+            val cacheKey = cacheManager.generateKey("analyzeStyle", promptWithGender, contextStr)
+            
+            // 캐시 확인
+            val cached = cacheManager.get(cacheKey)
+            if (cached != null) {
+                val analysis = deserializeFashionRecommendation(cached)
+                if (analysis != null) {
+                    Log.d(TAG, "Style analysis cache HIT")
+                    return Result.success(analysis)
+                }
+            }
+            
+            // API 호출
+            Log.d(TAG, "Requesting style analysis with prompt: $promptWithGender")
+            val result = nanoBananaService.analyzeStyle(promptWithGender, context)
+            
+            // 성공 시 캐시 저장
+            result.onSuccess { analysis ->
+                cacheManager.put(cacheKey, serializeFashionRecommendation(analysis))
+            }
+            
+            result
         } catch (e: Exception) {
-            Log.e("ShopRepository", "Error analyzing style", e)
+            Log.e(TAG, "Error analyzing style", e)
             Result.failure(e)
         }
     }
     
     override suspend fun matchOutfit(prompt: String, context: NanoBananaContext?): Result<FashionRecommendation> {
         return try {
-            Log.d("ShopRepository", "Requesting outfit matching with prompt: $prompt")
-            nanoBananaService.matchOutfit(prompt, context)
+            // 캐시 키 생성
+            val contextStr = context?.wardrobeItems?.size?.toString() ?: "no_context"
+            val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(this@ShopRepositoryImpl.context)
+            val promptWithGender = if (!genderTag.isNullOrBlank()) "[사용자 성별: $genderTag] $prompt" else prompt
+            val cacheKey = cacheManager.generateKey("matchOutfit", promptWithGender, contextStr)
+            
+            // 캐시 확인
+            val cached = cacheManager.get(cacheKey)
+            if (cached != null) {
+                val matching = deserializeFashionRecommendation(cached)
+                if (matching != null) {
+                    Log.d(TAG, "Outfit matching cache HIT")
+                    return Result.success(matching)
+                }
+            }
+            
+            // API 호출
+            Log.d(TAG, "Requesting outfit matching with prompt: $promptWithGender")
+            val result = nanoBananaService.matchOutfit(promptWithGender, context)
+            
+            // 성공 시 캐시 저장
+            result.onSuccess { matching ->
+                cacheManager.put(cacheKey, serializeFashionRecommendation(matching))
+            }
+            
+            result
         } catch (e: Exception) {
-            Log.e("ShopRepository", "Error matching outfit", e)
+            Log.e(TAG, "Error matching outfit", e)
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * FashionRecommendation 직렬화
+     */
+    private fun serializeFashionRecommendation(recommendation: FashionRecommendation): String {
+        val itemsArray = JSONArray()
+        recommendation.recommendedItems.forEach { item ->
+            itemsArray.put(
+                JSONObject()
+                    .put("category", item.category)
+                    .put("description", item.description)
+                    .put("color", item.color)
+                    .put("style", item.style)
+                    .put("priceRange", item.priceRange)
+                    .put("searchKeywords", JSONArray(item.searchKeywords))
+            )
+        }
+        
+        val productsArray = JSONArray()
+        recommendation.products.forEach { product ->
+            productsArray.put(serializeProduct(product))
+        }
+        
+        return JSONObject()
+            .put("id", recommendation.id)
+            .put("title", recommendation.title)
+            .put("description", recommendation.description)
+            .put("recommendedItems", itemsArray)
+            .put("reasoning", recommendation.reasoning)
+            .put("confidence", recommendation.confidence)
+            .put("occasion", recommendation.occasion)
+            .put("products", productsArray)
+            .toString()
+    }
+    
+    /**
+     * FashionRecommendation 역직렬화
+     */
+    private fun deserializeFashionRecommendation(json: String): FashionRecommendation? {
+        return try {
+            val obj = JSONObject(json)
+            
+            // RecommendedItems 역직렬화
+            val itemsArray = obj.getJSONArray("recommendedItems")
+            val items = mutableListOf<RecommendedItem>()
+            for (i in 0 until itemsArray.length()) {
+                val itemObj = itemsArray.getJSONObject(i)
+                val keywordsArray = itemObj.getJSONArray("searchKeywords")
+                val keywords = mutableListOf<String>()
+                for (j in 0 until keywordsArray.length()) {
+                    keywords.add(keywordsArray.getString(j))
+                }
+                
+                items.add(
+                    RecommendedItem(
+                        category = itemObj.getString("category"),
+                        description = itemObj.getString("description"),
+                        color = itemObj.optString("color").takeIf { it.isNotEmpty() },
+                        style = itemObj.optString("style").takeIf { it.isNotEmpty() },
+                        priceRange = itemObj.optString("priceRange").takeIf { it.isNotEmpty() },
+                        searchKeywords = keywords
+                    )
+                )
+            }
+            
+            // Products 역직렬화
+            val productsArray = obj.getJSONArray("products")
+            val products = mutableListOf<Product>()
+            for (i in 0 until productsArray.length()) {
+                deserializeProduct(productsArray.getJSONObject(i))?.let { products.add(it) }
+            }
+            
+            FashionRecommendation(
+                id = obj.getString("id"),
+                title = obj.getString("title"),
+                description = obj.getString("description"),
+                recommendedItems = items,
+                reasoning = obj.getString("reasoning"),
+                confidence = obj.getDouble("confidence").toFloat(),
+                occasion = obj.optString("occasion").takeIf { it.isNotEmpty() },
+                products = products
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to deserialize FashionRecommendation", e)
+            null
         }
     }
 }

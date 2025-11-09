@@ -84,24 +84,7 @@ fun FitGhostNavHost(navController: NavHostController, modifier: Modifier = Modif
 
         // 상점 화면
         composable(FitGhostDestination.Shop.route) {
-            ShopScreen(
-                    onNavigateToCart = { navController.navigate(FitGhostDestination.Cart.route) }
-            )
-        }
-
-        // 장바구니 화면
-        composable(FitGhostDestination.Cart.route) {
-            CartScreen(
-                    onNavigateBack = {
-                        if (!navController.popBackStack()) {
-                            navController.navigate(FitGhostDestination.Shop.route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    }
-            )
+            ShopScreen()
         }
 
         // 갤러리 화면
