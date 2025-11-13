@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,14 +19,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.fitghost.app.ai.ModelManager
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
+import com.fitghost.app.data.db.CategoryEntity
 import com.fitghost.app.ui.components.softClayInset
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import com.fitghost.app.constants.CategoryConstants
 
 /** 옷장 메인 화면 PRD: Wardrobe CRUD + 필터 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +42,10 @@ fun WardrobeScreen(
     val context = LocalContext.current
     val viewModel: WardrobeViewModel = viewModel(factory = WardrobeViewModelFactory(context))
     val state by viewModel.uiState.collectAsState()
+    val categories by viewModel.categories.collectAsState()
+    
+    // 카테고리 추가 다이얼로그 상태
+    var showCategoryManagementDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(FitGhostColors.BgPrimary)) {
         // 상단 앱바
@@ -50,6 +59,9 @@ fun WardrobeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { showCategoryManagementDialog = true }) {
+                        Icon(imageVector = Icons.Outlined.Category, contentDescription = "카테고리 관리")
+                    }
                     IconButton(onClick = onNavigateToAdd) {
                         Icon(imageVector = Icons.Outlined.Add, contentDescription = "아이템 추가")
                     }
@@ -59,24 +71,26 @@ fun WardrobeScreen(
 
         // 필터 & 검색
         Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 카테고리 필터 칩
-            Row(
+            // 카테고리 필터 칩 (가로 스크롤 지원)
+            LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
             ) {
-                CategoryChip(
-                        label = "전체",
-                        selected = state.filter.category == null,
-                        onClick = { viewModel.setCategory(null) }
-                )
-                WardrobeCategory.values().forEach { cat ->
+                item {
                     CategoryChip(
-                            label = categoryLabel(cat),
-                            selected = state.filter.category == cat,
-                            onClick = { viewModel.setCategory(cat) }
+                            label = "전체",
+                            selected = state.filter.category == null,
+                            onClick = { viewModel.setCategory(null) }
+                    )
+                }
+                items(categories) { cat ->
+                    CategoryChip(
+                            label = cat.displayName,
+                            selected = state.filter.category == cat.id,
+                            onClick = { viewModel.setCategory(cat.id) }
                     )
                 }
             }
@@ -141,6 +155,442 @@ fun WardrobeScreen(
             }
         }
     }
+    
+    // 카테고리 관리 다이얼로그
+    if (showCategoryManagementDialog) {
+        CategoryManagementDialog(
+            categories = categories,
+            onDismiss = { showCategoryManagementDialog = false },
+            onAddCategory = { categoryName, onResult ->
+                viewModel.addCategory(categoryName, onResult)
+            },
+            onRenameCategory = { oldId, newId, newDisplayName, onResult ->
+                viewModel.renameCategory(oldId, newId, newDisplayName, onResult)
+            },
+            onDeleteCategory = { categoryId, onResult ->
+                viewModel.deleteCategory(categoryId, onResult)
+            },
+            onReorderCategories = { newOrderIds, onResult ->
+                viewModel.reorderCategories(newOrderIds, onResult)
+            }
+        )
+    }
+}
+
+
+
+/**
+ * 카테고리 추가 다이얼로그
+ * 사용자가 새로운 카테고리를 생성할 수 있음
+ */
+@Composable
+private fun AddCategoryDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    existingCategories: List<String>
+) {
+    var categoryName by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("새 카테고리 추가") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "새로운 카테고리 이름을 입력하세요 (예: 양말, 모자, 스카프)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary
+                )
+                OutlinedTextField(
+                    value = categoryName,
+                    onValueChange = {
+                        categoryName = it
+                        errorMessage = null
+                    },
+                    label = { Text("카테고리 이름") },
+                    singleLine = true,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val trimmed = categoryName.trim()
+                    when {
+                        trimmed.isEmpty() -> {
+                            errorMessage = "카테고리 이름을 입력하세요"
+                        }
+                        existingCategories.contains(trimmed) -> {
+                            errorMessage = "이미 존재하는 카테고리입니다"
+                        }
+                        else -> {
+                            onConfirm(trimmed)
+                        }
+                    }
+                }
+            ) {
+                Text("추가")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
+        }
+    )
+}
+
+/**
+ * 카테고리 관리 다이얼로그
+ * 카테고리 목록을 보여주고 추가/편집/삭제 기능 제공
+ */
+@Composable
+private fun CategoryManagementDialog(
+    categories: List<com.fitghost.app.data.db.CategoryEntity>,
+    onDismiss: () -> Unit,
+    onAddCategory: (String, (Result<Unit>) -> Unit) -> Unit,
+    onRenameCategory: (String, String, String, (Result<Unit>) -> Unit) -> Unit,
+    onDeleteCategory: (String, (Result<Unit>) -> Unit) -> Unit,
+    onReorderCategories: (List<String>, (Result<Unit>) -> Unit) -> Unit
+) {
+    val context = LocalContext.current
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf<com.fitghost.app.data.db.CategoryEntity?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<com.fitghost.app.data.db.CategoryEntity?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // 로컬 순서 편집 상태 (최대 12개이므로 Column 기반으로 충분)
+    val localOrder = remember(categories) {
+        mutableStateListOf<String>().also { list -> list.addAll(categories.map { it.id }) }
+    }
+    val idToCategory = remember(categories) { categories.associateBy { it.id } }
+    val isOrderChanged = remember(localOrder, categories) {
+        localOrder.toList() != categories.map { it.id }
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text("카테고리 관리") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 안내 메시지
+                androidx.compose.material3.Text(
+                    "최대 ${CategoryConstants.MAX_CATEGORIES}개까지 카테고리를 만들 수 있습니다. (현재: ${categories.size}/${CategoryConstants.MAX_CATEGORIES})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary
+                )
+
+                if (errorMessage != null) {
+                    androidx.compose.material3.Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 카테고리 목록 (로컬 순서 표시)
+                localOrder.forEachIndexed { index, id ->
+                    val category = idToCategory[id] ?: return@forEachIndexed
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Text(
+                            text = category.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // 순서 이동 (위/아래)
+                            androidx.compose.material3.IconButton(
+                                onClick = {
+                                    if (index > 0) {
+                                        localOrder.removeAt(index)
+                                        localOrder.add(index - 1, id)
+                                    }
+                                },
+                                enabled = index > 0
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Outlined.KeyboardArrowUp,
+                                    contentDescription = "위로",
+                                    tint = if (index > 0) FitGhostColors.AccentPrimary else FitGhostColors.TextTertiary
+                                )
+                            }
+                            androidx.compose.material3.IconButton(
+                                onClick = {
+                                    if (index < localOrder.lastIndex) {
+                                        localOrder.removeAt(index)
+                                        localOrder.add(index + 1, id)
+                                    }
+                                },
+                                enabled = index < localOrder.lastIndex
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = "아래로",
+                                    tint = if (index < localOrder.lastIndex) FitGhostColors.AccentPrimary else FitGhostColors.TextTertiary
+                                )
+                            }
+                            // 편집 버튼
+                            androidx.compose.material3.IconButton(
+                                onClick = { showEditDialog = category }
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Outlined.Edit,
+                                    contentDescription = "편집",
+                                    tint = FitGhostColors.AccentPrimary
+                                )
+                            }
+
+                            // 삭제 버튼
+                            androidx.compose.material3.IconButton(
+                                onClick = { showDeleteDialog = category }
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Outlined.DeleteOutline,
+                                    contentDescription = "삭제",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 새 카테고리 추가 버튼
+                if (categories.size < CategoryConstants.MAX_CATEGORIES) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Outlined.Add,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.Text("새 카테고리 추가")
+                    }
+                }
+
+                // 순서 저장 버튼 (변경 시에만 활성화)
+                if (isOrderChanged) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            onReorderCategories(localOrder.toList()) { result ->
+                                result.onSuccess {
+                                    errorMessage = null
+                                    Toast.makeText(context, "순서가 저장되었습니다", Toast.LENGTH_SHORT).show()
+                                }.onFailure { e ->
+                                    errorMessage = e.message
+                                    Toast.makeText(
+                                        context,
+                                        e.message ?: "순서 저장 실패",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        androidx.compose.material3.Text("순서 저장")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text("닫기")
+            }
+        }
+    )
+
+    // 카테고리 추가 다이얼로그
+    if (showAddDialog) {
+        val context = LocalContext.current
+        AddCategoryDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { categoryName ->
+                onAddCategory(categoryName) { result ->
+                    result.onSuccess {
+                        showAddDialog = false
+                        errorMessage = null
+                        Toast.makeText(context, "카테고리가 추가되었습니다", Toast.LENGTH_SHORT).show()
+                    }.onFailure { e ->
+                        errorMessage = e.message
+                        Toast.makeText(
+                            context,
+                            e.message ?: "카테고리 추가 실패",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            },
+            existingCategories = categories.map { it.id }
+        )
+    }
+
+    // 카테고리 편집 다이얼로그
+    showEditDialog?.let { category ->
+        EditCategoryDialog(
+            category = category,
+            onDismiss = { showEditDialog = null },
+            onConfirm = { newId, newDisplayName ->
+                onRenameCategory(category.id, newId, newDisplayName) { result ->
+                    result.onSuccess {
+                        showEditDialog = null
+                        errorMessage = null
+                        Toast.makeText(context, "카테고리가 수정되었습니다", Toast.LENGTH_SHORT).show()
+                    }.onFailure { e ->
+                        errorMessage = e.message
+                        Toast.makeText(
+                            context,
+                            e.message ?: "카테고리 수정 실패",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            },
+            existingCategories = categories.map { it.id }.filter { it != category.id }
+        )
+    }
+
+    // 카테고리 삭제 확인 다이얼로그
+    showDeleteDialog?.let { category ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { androidx.compose.material3.Text("카테고리 삭제") },
+            text = {
+                val msg = if (category.id == CategoryConstants.FALLBACK_CATEGORY) {
+                    "\"${category.displayName}\" 카테고리를 삭제하시겠습니까?\n\n" +
+                    "이 카테고리에 속한 모든 아이템은 다른 카테고리로 이동됩니다."
+                } else {
+                    "\"${category.displayName}\" 카테고리를 삭제하시겠습니까?\n\n" +
+                    "이 카테고리에 속한 모든 아이템은 \"${CategoryConstants.FALLBACK_CATEGORY}\" 카테고리로 이동됩니다."
+                }
+                androidx.compose.material3.Text(msg)
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        onDeleteCategory(category.id) { result ->
+                            result.onSuccess {
+                                showDeleteDialog = null
+                                errorMessage = null
+                                Toast.makeText(context, "카테고리가 삭제되었습니다", Toast.LENGTH_SHORT).show()
+                            }.onFailure { e ->
+                                errorMessage = e.message
+                                showDeleteDialog = null
+                                Toast.makeText(
+                                    context,
+                                    e.message ?: "카테고리 삭제 실패",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                ) {
+                    androidx.compose.material3.Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteDialog = null }) {
+                    androidx.compose.material3.Text("취소")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 카테고리 편집 다이얼로그
+ */
+@Composable
+private fun EditCategoryDialog(
+    category: com.fitghost.app.data.db.CategoryEntity,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit,
+    existingCategories: List<String>
+) {
+    var categoryName by remember { mutableStateOf(category.displayName) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text("카테고리 편집") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.Text(
+                    "카테고리 이름을 수정하세요",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = categoryName,
+                    onValueChange = {
+                        categoryName = it
+                        errorMessage = null
+                    },
+                    label = { androidx.compose.material3.Text("카테고리 이름") },
+                    singleLine = true,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (errorMessage != null) {
+                    androidx.compose.material3.Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val trimmed = categoryName.trim()
+                    when {
+                        trimmed.isEmpty() -> {
+                            errorMessage = "카테고리 이름을 입력하세요"
+                        }
+                        existingCategories.contains(trimmed) -> {
+                            errorMessage = "이미 존재하는 카테고리입니다"
+                        }
+                        else -> {
+                            onConfirm(trimmed, trimmed) // newId = newDisplayName
+                        }
+                    }
+                }
+            ) {
+                androidx.compose.material3.Text("저장")
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text("취소")
+            }
+        }
+    )
 }
 
 @Composable
@@ -158,12 +608,12 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
     )
 }
 
-private fun categoryLabel(cat: WardrobeCategory): String = WardrobeUiUtil.categoryLabel(cat)
+private fun categoryLabel(categoryId: String): String = WardrobeUiUtil.categoryLabel(categoryId)
 
 @Composable
 private fun EmptyWardrobe() {
     Card(
-            modifier = Modifier.fillMaxSize().padding(16.dp).softClayInset(),
+            modifier = Modifier.fillMaxSize().padding(Spacing.lg).softClayInset(),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
             shape = RoundedCornerShape(24.dp)
     ) {
@@ -206,10 +656,10 @@ private fun WardrobeItemRow(
     Card(
             modifier = Modifier.fillMaxWidth().softClayInset(),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(Spacing.lg),
             onClick = onClick
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Spacing.lg)) {
             Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -299,7 +749,7 @@ private fun WardrobeItemRow(
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(IconSize.md)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("유사 상품 찾기")

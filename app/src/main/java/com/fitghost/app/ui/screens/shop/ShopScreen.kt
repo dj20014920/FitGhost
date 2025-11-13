@@ -17,6 +17,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.ComponentSize
+import com.fitghost.app.ui.theme.CornerRadius
 import com.fitghost.app.data.repository.CartRepositoryProvider
 import com.fitghost.app.data.model.FashionRecommendation
 import com.fitghost.app.data.model.Product
@@ -133,7 +137,7 @@ fun ShopScreen(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
                         },
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(Spacing.lg)
                 )
                 
                 // 이미지 검색 결과 미리보기
@@ -145,7 +149,7 @@ fun ShopScreen(
                             // 어울리는 아이템 클릭 시 해당 카테고리로 검색
                             viewModel.updateSearchQuery(category)
                         },
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = Spacing.lg)
                     )
                 }
             }
@@ -407,9 +411,9 @@ private fun SelectionToolbar(
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Checkbox(checked = allSelected, onCheckedChange = { onToggleAll(it) })
             Column(modifier = Modifier.weight(1f)) {
@@ -423,14 +427,14 @@ private fun SelectionToolbar(
                 Text(
                     text = totalText,
                     style = MaterialTheme.typography.titleMedium,
-                    color = FitGhostColors.AccentPrimary,
-                    fontWeight = FontWeight.Bold
+                    color = FitGhostColors.AccentPrimary
                 )
             }
             Button(
                 onClick = onPaySelected,
                 enabled = selectedCount > 0,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(CornerRadius.md),
+                modifier = Modifier.height(ComponentSize.buttonMedium)
             ) { Text("선택 결제") }
         }
     }
@@ -488,10 +492,10 @@ private fun ImageSearchPreview(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(CornerRadius.md)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(Spacing.md)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -500,18 +504,17 @@ private fun ImageSearchPreview(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Image,
                         contentDescription = null,
                         tint = FitGhostColors.AccentPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                     Text(
                         text = result.sourceImage ?: "이미지 검색",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         color = FitGhostColors.TextPrimary
                     )
                 }
@@ -519,27 +522,27 @@ private fun ImageSearchPreview(
                     Icon(
                         imageVector = Icons.Outlined.Close,
                         contentDescription = "검색 초기화",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
             }
             
             if (result.matchingCategories.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(Spacing.sm))
                 Text(
                     text = "어울리는 아이템",
                     style = MaterialTheme.typography.labelSmall,
                     color = FitGhostColors.TextSecondary
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(Spacing.xs))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs.times(1.5f))
                 ) {
                     result.matchingCategories.take(4).forEach { category ->
                         Surface(
                             color = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(CornerRadius.sm),
                             modifier = Modifier.clickable { 
                                 onCategoryClick(category)
                             }
@@ -583,7 +586,7 @@ private fun LoadingSection(message: String? = null) {
 @Composable
 private fun RecommendationHeader(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-            modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier = modifier.fillMaxWidth().padding(horizontal = Spacing.lg),
             verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = "AI 추천", fontWeight = FontWeight.Bold)
@@ -712,7 +715,7 @@ private fun AIRecommendationHeader(
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("맞춤 추천 요청하기")
@@ -734,7 +737,7 @@ private fun AIRecommendationCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = Spacing.lg),
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
@@ -874,7 +877,7 @@ private fun AIRecommendationCard(
                         imageVector = Icons.Outlined.ShoppingBag,
                         contentDescription = null,
                         tint = FitGhostColors.AccentPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))

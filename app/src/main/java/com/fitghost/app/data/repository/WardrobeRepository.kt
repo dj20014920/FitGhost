@@ -1,7 +1,6 @@
 package com.fitghost.app.data.repository
 
 import android.content.Context
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeDao
 import com.fitghost.app.data.db.WardrobeDatabase
 import com.fitghost.app.data.db.WardrobeItemEntity
@@ -32,7 +31,7 @@ class WardrobeRepository(
 
     fun observeById(id: Long): Flow<WardrobeItemEntity?> = dao.observeById(id)
 
-    fun observeByCategory(category: WardrobeCategory): Flow<List<WardrobeItemEntity>> =
+    fun observeByCategory(category: String): Flow<List<WardrobeItemEntity>> =
             dao.observeByCategory(category)
 
     fun observeFavorites(): Flow<List<WardrobeItemEntity>> = dao.observeFavorites()

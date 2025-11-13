@@ -28,13 +28,15 @@ import java.io.ByteArrayOutputStream
  * ```
  */
 class WardrobeAutoComplete(private val context: Context) {
+    
+    private val categoryRepo = com.fitghost.app.data.repository.CategoryRepository(context)
 
     /**
      * 기존 입력값(사용자 혹은 이전 값) - 모델 프롬프트에 함께 제공하여 정밀 자동완성
      */
     data class ExistingFields(
         val name: String = "",
-        val category: com.fitghost.app.data.db.WardrobeCategory? = null,
+        val category: String? = null, // 카테고리 ID (예: "상의", "양말")
         val brand: String = "",
         val color: String = "",
         val size: String = "",
@@ -44,18 +46,20 @@ class WardrobeAutoComplete(private val context: Context) {
         val memo: String = ""
     )
 
-    companion object {
-        private const val TAG = "WardrobeAutoComplete"
-        @Volatile private var warmedOnce: Boolean = false
+
+    /**
+     * 동적 카테고리 목록을 포함한 분석 프롬프트 생성
+     * 사용자가 추가한 커스텀 카테고리도 AI가 인식하도록 함
+     */
+    private suspend fun buildAnalysisPrompt(): String {
+        val categories = categoryRepo.getAll()
+        val categoryList = categories.joinToString(", ") { it.id } // 예: "상의, 하의, 아우터, 신발, 악세서리, 기타, 양말"
         
-        // 시스템 지시문 (OpenAI 호환 Chat 시스템 역할용)
-        // 출력은 오직 단일 JSON 오브젝트 하나만 허용됩니다.
-        // 스키마를 반드시 준수하고, 여분의 텍스트/코드펜스/주석은 금지합니다.
-        private const val ANALYSIS_PROMPT_TEMPLATE = """
+        return """
 You are a fashion item analysis assistant. Analyze the clothing IMAGE together with the GIVEN EXISTING FIELDS and fill a single JSON object. Output ONLY the JSON (no extra text, no markdown), start with '{' and end with '}'.
 
 Dropdown options (must choose exactly from these; if not applicable, choose OTHER and provide a free-text string):
-- category: TOP, BOTTOM, OUTER, SHOES, ACCESSORY, OTHER
+- category: $categoryList
 - color (examples, not exhaustive): black, white, gray, navy, blue, red, green, yellow, beige, brown, ivory, cream, pink, purple, khaki, orange
 - pattern ONLY (examples): solid, stripe, plaid, dot, graphic
 
@@ -73,7 +77,7 @@ Rules:
 
 The JSON schema to output:
 {
-  "category": "TOP|BOTTOM|OUTER|SHOES|ACCESSORY|OTHER",
+  "category": "$categoryList (choose one from this list)",
   "name": "descriptive name or empty",
   "brand": "brand or empty",
   "color": "from dropdown or empty",
@@ -84,6 +88,16 @@ The JSON schema to output:
   "description": "brief description or empty"
 }
 """
+    }
+
+    companion object {
+        private const val TAG = "WardrobeAutoComplete"
+        @Volatile private var warmedOnce: Boolean = false
+        
+        // 시스템 지시문 (OpenAI 호환 Chat 시스템 역할용)
+        // 출력은 오직 단일 JSON 오브젝트 하나만 허용됩니다.
+        // 스키마를 반드시 준수하고, 여분의 텍스트/코드펜스/주석은 금지합니다.
+        // 주의: 카테고리 목록은 동적으로 생성됩니다 (buildAnalysisPrompt 참고)
         
         // 모델 파라미터
         private const val MAX_TOKENS = 128
@@ -131,20 +145,6 @@ The JSON schema to output:
                 )
             }
         }
-        
-        /**
-         * 카테고리를 WardrobeCategory enum으로 변환
-         */
-        fun toCategoryEnum(): com.fitghost.app.data.db.WardrobeCategory {
-            return when (category.uppercase()) {
-                "TOP" -> com.fitghost.app.data.db.WardrobeCategory.TOP
-                "BOTTOM" -> com.fitghost.app.data.db.WardrobeCategory.BOTTOM
-                "OUTER" -> com.fitghost.app.data.db.WardrobeCategory.OUTER
-                "SHOES" -> com.fitghost.app.data.db.WardrobeCategory.SHOES
-                "ACCESSORY" -> com.fitghost.app.data.db.WardrobeCategory.ACCESSORY
-                else -> com.fitghost.app.data.db.WardrobeCategory.OTHER
-            }
-        }
     }
     
     // HTTP 클라이언트 제거: 임베드 서버 JNI로 직접 호출
@@ -158,6 +158,8 @@ The JSON schema to output:
     suspend fun analyzeClothingImage(image: Bitmap, existing: ExistingFields = ExistingFields()): Result<ClothingMetadata> {
         return withContext(Dispatchers.IO) {
             try {
+                // 동적 카테고리를 포함한 프롬프트 생성
+                val dynamicPrompt = buildAnalysisPrompt()
                 Log.d(TAG, "Starting clothing image analysis (cloud-first)...")
                 Log.d(TAG, "Existing fields snapshot: ${existing.summaryForLog()}")
                 Log.d(TAG, "Bitmap: ${image.width}x${image.height}")
@@ -215,7 +217,7 @@ The JSON schema to output:
                 val existingText = buildString {
                     append("Existing fields (may be blank):\n")
                     append("name: ").append(existing.name).append('\n')
-                    append("category: ").append(existing.category?.name ?: "").append('\n')
+                    append("category: ").append(existing.category ?: "").append('\n')
                     append("brand: ").append(existing.brand).append('\n')
                     append("color: ").append(existing.color).append('\n')
                     append("size: ").append(existing.size).append('\n')
@@ -225,7 +227,7 @@ The JSON schema to output:
                     append("memo: ").append(existing.memo)
                 }
                 var response = EmbeddedLlamaServer.nativeAnalyze(
-                    systemPrompt = ANALYSIS_PROMPT_TEMPLATE,
+                    systemPrompt = dynamicPrompt,
                     userText = "Fill the JSON for this clothing IMAGE using the rules above. Use dropdown options when possible; if not, set OTHER and free text.\n" + existingText,
                     imagePng = pngBytes,
                     temperature = TEMPERATURE.toDouble(),
@@ -238,7 +240,7 @@ The JSON schema to output:
                 val metadata = runCatching { parseResponse(response) }.getOrElse { firstErr ->
                     Log.w(TAG, "First parse failed, retrying with strict JSON prompt", firstErr)
                     response = EmbeddedLlamaServer.nativeAnalyze(
-                        systemPrompt = ANALYSIS_PROMPT_TEMPLATE,
+                        systemPrompt = dynamicPrompt,
                         userText = "Output ONLY one JSON object. Start with '{'. IMPORTANT: Never use placeholder like 'string' or '...'. If unknown, use empty string.\n" + existingText,
                         imagePng = pngBytes,
                         temperature = 0.05,
@@ -387,7 +389,7 @@ The JSON schema to output:
     private fun ExistingFields.summaryForLog(): String {
         return buildString {
             append("name='").append(name).append("', ")
-            append("category='").append(category?.name ?: "").append("', ")
+            append("category='").append(category ?: "").append("', ")
             append("brand='").append(brand).append("', ")
             append("color='").append(color).append("', ")
             append("size='").append(size).append("', ")

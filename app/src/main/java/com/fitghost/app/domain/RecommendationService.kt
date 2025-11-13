@@ -1,6 +1,5 @@
 package com.fitghost.app.domain
 
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
 import com.fitghost.app.data.repository.WardrobeRepository
 import com.fitghost.app.data.model.OutfitRecommendation
@@ -21,7 +20,7 @@ data class RecommendationParams(
 data class WardrobeItemSummary(
     val id: Long,
     val name: String,
-    val category: WardrobeCategory,
+    val category: String, // 카테고리 ID (예: "상의", "양말")
     val color: String?,
     val imageUri: String?,
     val favorite: Boolean
@@ -271,14 +270,14 @@ class RecommendationService(
     /**
      * 카테고리별 일반적인 검색어 생성
      */
-    private fun getCategoryBasedQuery(category: com.fitghost.app.data.db.WardrobeCategory): String {
+    private fun getCategoryBasedQuery(category: String): String {
         return when (category) {
-            com.fitghost.app.data.db.WardrobeCategory.TOP -> "티셔츠"
-            com.fitghost.app.data.db.WardrobeCategory.BOTTOM -> "팬츠"
-            com.fitghost.app.data.db.WardrobeCategory.OUTER -> "재킷"
-            com.fitghost.app.data.db.WardrobeCategory.SHOES -> "스니커즈"
-            com.fitghost.app.data.db.WardrobeCategory.ACCESSORY -> "악세서리"
-            else -> "패션"
+            "상의" -> "티셔츠"
+            "하의" -> "팬츠"
+            "아우터" -> "재킷"
+            "신발" -> "스니커즈"
+            "악세서리" -> "악세서리"
+            else -> category // 커스텀 카테고리는 그대로 사용
         }
     }
 

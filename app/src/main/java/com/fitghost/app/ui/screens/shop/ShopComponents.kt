@@ -24,6 +24,10 @@ import com.fitghost.app.data.model.Product
 import com.fitghost.app.ui.components.SoftClayButton
 import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
+import com.fitghost.app.ui.theme.ComponentSize
 
 /**
  * 추천 코디 카드
@@ -43,10 +47,10 @@ fun RecommendationCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(Spacing.lg.times(1.25f)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 추천 헤더
@@ -60,7 +64,7 @@ fun RecommendationCard(
                         .size(48.dp)
                         .background(
                             FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                            RoundedCornerShape(12.dp)
+                            RoundedCornerShape(CornerRadius.md)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -119,10 +123,10 @@ private fun RecommendationProductItem(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgPrimary
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(Spacing.lg)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -130,7 +134,7 @@ private fun RecommendationProductItem(
             Box(
                 modifier = Modifier
                     .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(CornerRadius.md))
                     .background(FitGhostColors.BgTertiary),
                 contentAlignment = Alignment.Center
             ) {
@@ -149,7 +153,7 @@ private fun RecommendationProductItem(
                         imageVector = Icons.Outlined.Checkroom,
                         contentDescription = null,
                         tint = FitGhostColors.TextTertiary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(IconSize.lg)
                     )
                 }
             }
@@ -191,7 +195,7 @@ private fun RecommendationProductItem(
                         .size(36.dp)
                         .background(
                             FitGhostColors.BgTertiary,
-                            RoundedCornerShape(8.dp)
+                            RoundedCornerShape(CornerRadius.sm)
                         )
                         .semantics { contentDescription = "찜하기" }
                 ) {
@@ -201,7 +205,7 @@ private fun RecommendationProductItem(
                         contentDescription = "찜하기",
                         tint = if (product.isWishlisted) FitGhostColors.AccentPrimary 
                               else FitGhostColors.TextSecondary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
                 
@@ -211,7 +215,7 @@ private fun RecommendationProductItem(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = FitGhostColors.AccentPrimary
                     ),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(CornerRadius.sm),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     modifier = Modifier
                         .height(36.dp)
@@ -220,7 +224,7 @@ private fun RecommendationProductItem(
                     Icon(
                         imageVector = Icons.Outlined.ShoppingCart,
                         contentDescription = "장바구니",
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(IconSize.sm)
                     )
                 }
             }
@@ -247,10 +251,10 @@ fun ProductCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(Spacing.lg)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -258,7 +262,7 @@ fun ProductCard(
             Box(
                 modifier = Modifier
                     .size(80.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(CornerRadius.md))
                     .background(FitGhostColors.BgTertiary),
                 contentAlignment = Alignment.Center
             ) {
@@ -319,7 +323,7 @@ fun ProductCard(
                             .size(44.dp) // 최소 터치 타깃
                             .background(
                                 FitGhostColors.BgTertiary,
-                                RoundedCornerShape(8.dp)
+                                RoundedCornerShape(CornerRadius.sm)
                             )
                             .semantics { contentDescription = "찜하기" }
                     ) {
@@ -338,7 +342,7 @@ fun ProductCard(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = FitGhostColors.AccentPrimary
                         ),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(CornerRadius.sm),
                         modifier = Modifier
                             .height(44.dp) // 최소 터치 타깃
                             .semantics { contentDescription = "장바구니" }
@@ -350,7 +354,7 @@ fun ProductCard(
                             Icon(
                                 imageVector = Icons.Outlined.ShoppingCart,
                                 contentDescription = "장바구니",
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(IconSize.md)
                             )
                             Text(
                                 text = "담기",
@@ -376,7 +380,7 @@ fun LoadingSection(modifier: Modifier = Modifier) {
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Box(
             modifier = Modifier
@@ -406,7 +410,7 @@ fun EmptySearchResults(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Column(
             modifier = Modifier

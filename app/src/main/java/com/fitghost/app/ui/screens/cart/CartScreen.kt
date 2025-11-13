@@ -18,7 +18,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.components.softClayInset
+import com.fitghost.app.ui.components.TertiaryButton
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
 
 /** 장바구니 화면 PRD: 몰별 그룹 + 순차 결제, 홈 화면과 유사한 UI/UX */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,19 +42,15 @@ fun CartScreen(
                     Text(
                             text = "장바구니",
                             style = MaterialTheme.typography.headlineLarge,
-                            color = FitGhostColors.TextPrimary,
-                            fontWeight = FontWeight.Bold
+                            color = FitGhostColors.TextPrimary
                     )
                 },
                 actions = {
                     if (totalItemCount > 0) {
-                        TextButton(
-                                onClick = { viewModel.clearAllCart() },
-                                colors =
-                                        ButtonDefaults.textButtonColors(
-                                                contentColor = FitGhostColors.TextSecondary
-                                        )
-                        ) { Text(text = "전체 삭제", style = MaterialTheme.typography.bodyMedium) }
+                        TertiaryButton(
+                                text = "전체 삭제",
+                                onClick = { viewModel.clearAllCart() }
+                        )
                     }
                 },
                 navigationIcon = {
@@ -71,8 +69,8 @@ fun CartScreen(
             // 장바구니 내용
             LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    contentPadding = PaddingValues(Spacing.xl),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xl)
             ) {
                 // 요약 정보
                 item { CartSummaryCard(totalItems = totalItemCount, totalGroups = cartGroups.size) }

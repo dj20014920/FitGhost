@@ -29,9 +29,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.fitghost.app.ai.ModelManager
 import com.fitghost.app.ai.WardrobeAutoComplete
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
+import com.fitghost.app.data.db.CategoryEntity
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
+import com.fitghost.app.ui.theme.ComponentSize
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,10 +67,13 @@ fun WardrobeAddScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    
+    // 카테고리 목록 가져오기
+    val categories by viewModel.categories.collectAsState()
 
     // 입력 상태들
     var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(WardrobeCategory.OTHER) }
+    var category by remember { mutableStateOf("기타") } // String 카테고리 ID
     var brand by remember { mutableStateOf("") }
     var color by remember { mutableStateOf("") }
     var size by remember { mutableStateOf("") }
@@ -161,9 +168,13 @@ fun WardrobeAddScreen(
                     if (metadata.name.isNotBlank()) {
                         name = metadata.name
                     }
-                    val normalizedCategory = metadata.category.trim().uppercase()
-                    if (normalizedCategory in setOf("TOP", "BOTTOM", "OUTER", "SHOES", "ACCESSORY")) {
-                        category = metadata.toCategoryEnum()
+                    // AI가 반환한 카테고리를 한글 카테고리로 매핑
+                    if (metadata.category.isNotBlank()) {
+                        val mappedCategory = mapAiCategoryToKorean(metadata.category)
+                        // 매핑된 카테고리가 존재하는 카테고리 목록에 있으면 설정
+                        if (categories.any { it.id == mappedCategory }) {
+                            category = mappedCategory
+                        }
                     }
                     if (metadata.color.isNotBlank()) {
                         color = metadata.color
@@ -305,7 +316,7 @@ fun WardrobeAddScreen(
                         Modifier.padding(inner)
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = Spacing.lg, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 사용 팁
@@ -330,11 +341,11 @@ fun WardrobeAddScreen(
             // 기본 정보 입력 카드
             Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(Spacing.lg),
                     colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary)
             ) {
                 Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
@@ -356,13 +367,13 @@ fun WardrobeAddScreen(
                             supportingText = { if (showNameHelper) Text("필수 항목입니다") }
                     )
 
-                    // 카테고리 선택
+                    // 카테고리 선택 (동적 카테고리 지원)
                     ExposedDropdownMenuBox(
                             expanded = catMenu,
                             onExpandedChange = { catMenu = it }
                     ) {
                         OutlinedTextField(
-                                value = categoryName(category),
+                                value = category, // 직접 카테고리 ID(한글) 표시
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("카테고리") },
@@ -375,11 +386,11 @@ fun WardrobeAddScreen(
                                 expanded = catMenu,
                                 onDismissRequest = { catMenu = false }
                         ) {
-                            WardrobeCategory.values().forEach { cat ->
+                            categories.forEach { cat ->
                                 DropdownMenuItem(
-                                        text = { Text(categoryName(cat)) },
+                                        text = { Text(cat.displayName) },
                                         onClick = {
-                                            category = cat
+                                            category = cat.id
                                             catMenu = false
                                         }
                                 )
@@ -402,11 +413,11 @@ fun WardrobeAddScreen(
             // 상세 정보 카드
             Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(Spacing.lg),
                     colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary)
             ) {
                 Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
@@ -600,10 +611,10 @@ private fun AssistiveNote() {
     Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgGlass),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(CornerRadius.md)
     ) {
         Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(Spacing.lg),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
         ) {
@@ -611,7 +622,7 @@ private fun AssistiveNote() {
                     imageVector = Icons.Outlined.Lightbulb,
                     contentDescription = null,
                     tint = FitGhostColors.AccentPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(IconSize.md)
             )
             Text(
                     text = "사진을 추가하면 AI가 더 정확한 스타일링을 제안할 수 있어요!",
@@ -628,11 +639,11 @@ private fun ImagePickerSection(imageUri: String?, onPickImage: () -> Unit) {
 
     Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(Spacing.lg),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary)
     ) {
         Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
@@ -647,7 +658,7 @@ private fun ImagePickerSection(imageUri: String?, onPickImage: () -> Unit) {
                 ElevatedButton(
                         onClick = onPickImage,
                         modifier = Modifier.fillMaxWidth().height(120.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(CornerRadius.md)
                 ) {
                     Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -689,7 +700,7 @@ private fun ImagePickerSection(imageUri: String?, onPickImage: () -> Unit) {
                                 modifier =
                                         Modifier.fillMaxWidth()
                                                 .height(previewHeight)
-                                                .clip(RoundedCornerShape(12.dp)),
+                                                .clip(RoundedCornerShape(CornerRadius.md)),
                                 contentScale = ContentScale.Fit
                         )
 
@@ -717,11 +728,11 @@ private fun PreferenceSection(
 ) {
     Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(Spacing.lg),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary)
     ) {
         Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -782,7 +793,7 @@ private fun StarRow(rating: Float, onRatingChange: (Float) -> Unit) {
                         tint =
                                 if (filled || halfFilled) FitGhostColors.AccentPrimary
                                 else FitGhostColors.TextTertiary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(IconSize.lg)
                 )
             }
         }
@@ -810,7 +821,7 @@ private fun SimpleSelectionDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(CornerRadius.md)
                         ) { Text(opt) }
                     }
                     Divider()
@@ -831,7 +842,7 @@ private fun SimpleSelectionDialog(
                             },
                             enabled = customValue.trim().isNotEmpty(),
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(CornerRadius.md)
                     ) { Text("직접 입력 적용") }
                 }
             }
@@ -898,9 +909,21 @@ private fun resizeAndPersist(
 
 // -------- UI 유틸 --------
 
-/** 카테고리 이름 표시 */
-private fun categoryName(category: WardrobeCategory): String =
-        WardrobeUiUtil.categoryLabel(category)
+/**
+ * AI 모델이 반환한 영문 카테고리를 한글 카테고리로 매핑
+ * 동적 카테고리 시스템에서도 기본 카테고리는 영문->한글 매핑 지원
+ */
+private fun mapAiCategoryToKorean(aiCategory: String): String {
+    return when (aiCategory.uppercase().trim()) {
+        "TOP" -> "상의"
+        "BOTTOM" -> "하의"
+        "OUTER" -> "아우터"
+        "SHOES" -> "신발"
+        "ACCESSORY" -> "악세서리"
+        "OTHER" -> "기타"
+        else -> aiCategory // 커스텀 카테고리는 그대로 반환
+    }
+}
 
 // -------- AI 자동 완성 UI 컴포넌트 --------
 
@@ -928,7 +951,7 @@ private fun AutoCompleteSection(
     AnimatedVisibility(visible = imageUri != null) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(Spacing.lg),
             colors = CardDefaults.cardColors(
                 containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.1f)
             )
@@ -936,7 +959,7 @@ private fun AutoCompleteSection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(Spacing.lg),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -952,7 +975,7 @@ private fun AutoCompleteSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(IconSize.lg),
                                 strokeWidth = 2.dp,
                                 color = FitGhostColors.AccentPrimary
                             )
@@ -988,7 +1011,7 @@ private fun AutoCompleteSection(
                                 Icon(
                                     imageVector = ctaIcon,
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(IconSize.md)
                                 )
                                 Text(
                                     text = ctaLabel,
@@ -1003,7 +1026,7 @@ private fun AutoCompleteSection(
 
             // 하단 가이드: 상태에 따라 도움말 제공
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val helper = when {
@@ -1058,7 +1081,7 @@ private fun DownloadProgressView(progress: ModelManager.DownloadProgress) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
-                .clip(RoundedCornerShape(4.dp)),
+                .clip(RoundedCornerShape(CornerRadius.sm)),
             color = FitGhostColors.AccentPrimary,
         )
         
@@ -1139,7 +1162,7 @@ private fun ModelDownloadDialog(
                     Icon(
                         imageVector = Icons.Outlined.Download,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("다운로드 시작")
@@ -1169,7 +1192,7 @@ private fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, t
             imageVector = icon,
             contentDescription = null,
             tint = FitGhostColors.AccentPrimary,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(IconSize.md)
         )
         Text(
             text = text,

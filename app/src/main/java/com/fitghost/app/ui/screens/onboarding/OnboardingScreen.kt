@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fitghost.app.data.settings.UserSettings
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.CornerRadius
 import kotlinx.coroutines.launch
 
 @Composable
@@ -35,7 +37,7 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -57,10 +59,10 @@ fun OnboardingScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(Spacing.lg.times(1.25f))
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
@@ -110,7 +112,7 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(Spacing.lg)
             ) {
                 if (saving) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp))

@@ -1,6 +1,5 @@
 package com.fitghost.app.domain
 
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
 import com.fitghost.app.data.weather.WeatherSnapshot
 import kotlin.math.abs
@@ -45,18 +44,18 @@ class OutfitRecommender {
 
         val categorized = wardrobe.groupBy { it.category }
         
-        // 날짜 기반 시드로 다양성 추가
-        val topScored = scoreItems(categorized[WardrobeCategory.TOP].orEmpty(), weather)
+        // 날짜 기반 시드로 다양성 추가 (카테고리 ID를 String으로 사용)
+        val topScored = scoreItems(categorized["상의"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed).take(5)
-        val bottomScored = scoreItems(categorized[WardrobeCategory.BOTTOM].orEmpty(), weather)
+        val bottomScored = scoreItems(categorized["하의"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed + 1).take(5)
-        val outerScored = scoreItems(categorized[WardrobeCategory.OUTER].orEmpty(), weather)
+        val outerScored = scoreItems(categorized["아우터"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed + 2).take(5)
-        val shoeScored = scoreItems(categorized[WardrobeCategory.SHOES].orEmpty(), weather)
+        val shoeScored = scoreItems(categorized["신발"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed + 3).take(5)
-        val accessoryScored = scoreItems(categorized[WardrobeCategory.ACCESSORY].orEmpty(), weather)
+        val accessoryScored = scoreItems(categorized["악세서리"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed + 4).take(5)
-        val onePieceScored = scoreItems(categorized[WardrobeCategory.OTHER].orEmpty(), weather)
+        val onePieceScored = scoreItems(categorized["기타"].orEmpty(), weather)
             .shuffleWithSeed(dailySeed + 5).take(5)
 
         val plans = mutableListOf<OutfitPlan>()

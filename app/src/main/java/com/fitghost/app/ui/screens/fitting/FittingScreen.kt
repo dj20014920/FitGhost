@@ -40,6 +40,9 @@ import com.fitghost.app.ui.screens.wardrobe.WardrobeUiUtil
 import com.fitghost.app.ui.screens.wardrobe.WardrobeViewModel
 import com.fitghost.app.ui.screens.wardrobe.WardrobeViewModelFactory
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
 import kotlinx.coroutines.launch
 
 import com.fitghost.app.engine.CompositeTryOnEngine
@@ -157,7 +160,7 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                         AsyncImage(
                                 model = java.io.File(lastSavedFile!!.absolutePath),
                                 contentDescription = "미리보기",
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(CornerRadius.md))
                         )
                     }
                 }
@@ -263,7 +266,7 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                                 color = FitGhostColors.TextTertiary
                             )
                         },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(CornerRadius.md),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = FitGhostColors.BgTertiary,
                             focusedBorderColor = FitGhostColors.AccentPrimary
@@ -386,7 +389,7 @@ private fun ModelImagePickSection(
             // 사진 선택 버튼 (오른쪽 배치)
             OutlinedButton(
                     onClick = onPick,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(CornerRadius.md),
                     modifier = Modifier.padding(start = 16.dp)
             ) { Text("사진 선택") }
         }
@@ -450,7 +453,7 @@ private fun ModelImagePickSection(
                         modifier =
                                 Modifier.fillMaxWidth()
                                         .heightIn(min = 180.dp)
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(RoundedCornerShape(CornerRadius.md))
                                         .clickable { /* TODO: full-screen preview */},
                         contentScale = ContentScale.Crop,
                         loading = {
@@ -479,7 +482,7 @@ private fun ModelImagePickSection(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         horizontalArrangement = Arrangement.End
                 ) {
-                    OutlinedButton(onClick = onClear, shape = RoundedCornerShape(12.dp)) {
+                    OutlinedButton(onClick = onClear, shape = RoundedCornerShape(CornerRadius.md)) {
                         Text("선택 해제")
                     }
                 }
@@ -569,7 +572,7 @@ private fun RecentModelPhotoItem(
         modifier = Modifier
             .aspectRatio(1f)
             .clickable { onSelect() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(CornerRadius.md),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
                 FitGhostColors.AccentPrimary.copy(alpha = 0.1f)
@@ -596,7 +599,7 @@ private fun RecentModelPhotoItem(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(IconSize.lg),
                             color = FitGhostColors.AccentPrimary,
                             strokeWidth = 2.dp
                         )
@@ -626,7 +629,7 @@ private fun RecentModelPhotoItem(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .size(24.dp)
+                        .size(IconSize.lg)
                 )
             }
         }
@@ -642,7 +645,7 @@ private fun EmptyRecentPhotoPlaceholder(
         modifier = Modifier
             .aspectRatio(1f)
             .clickable { onAddClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(CornerRadius.md),
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
@@ -663,7 +666,7 @@ private fun EmptyRecentPhotoPlaceholder(
                     imageVector = Icons.Outlined.AddAPhoto,
                     contentDescription = "사진 추가",
                     tint = FitGhostColors.TextTertiary.copy(alpha = 0.5f),
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(IconSize.xl)
                 )
                 Text(
                     text = "사진 추가",
@@ -682,11 +685,11 @@ private fun ClothingImageItem(uri: Uri, onRemove: () -> Unit) {
         SubcomposeAsyncImage(
                 model = uri,
                 contentDescription = null,
-                modifier = Modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)),
+                modifier = Modifier.aspectRatio(1f).clip(RoundedCornerShape(CornerRadius.md)),
                 contentScale = ContentScale.Crop,
                 loading = {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(IconSize.lg))
                     }
                 },
                 error = {
@@ -722,11 +725,11 @@ private fun FittingActionButton(enabled: Boolean, isProcessing: Boolean, onRun: 
                             containerColor = FitGhostColors.AccentPrimary,
                             disabledContainerColor = FitGhostColors.BgTertiary
                     ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(Spacing.lg)
     ) {
         if (isProcessing) {
             CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(IconSize.md),
                     color = FitGhostColors.TextInverse,
                     strokeWidth = 2.dp
             )

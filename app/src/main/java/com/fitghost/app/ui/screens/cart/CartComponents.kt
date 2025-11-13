@@ -18,6 +18,9 @@ import com.fitghost.app.data.model.CartItem
 import com.fitghost.app.ui.components.SoftClayButton
 import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
 
 /**
  * 몰별 장바구니 그룹 카드 - 개선된 UI/UX
@@ -79,7 +82,7 @@ fun CartGroupCard(
                         .size(44.dp)
                         .background(
                             FitGhostColors.BgTertiary,
-                            RoundedCornerShape(12.dp)
+                            RoundedCornerShape(CornerRadius.md)
                         )
                 ) {
                     Icon(
@@ -118,7 +121,7 @@ fun CartGroupCard(
                     .fillMaxWidth()
                     .height(60.dp),
                 text = "${group.shopName}에서 결제하기 (${group.totalPrice.toKrw()})",
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(Spacing.lg)
             )
         }
     }
@@ -144,10 +147,10 @@ private fun CartItemCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgPrimary
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(Spacing.lg.times(1.25f)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 상단: 선택 체크박스와 삭제 버튼
@@ -178,7 +181,7 @@ private fun CartItemCard(
                         imageVector = Icons.Outlined.DeleteOutline,
                         contentDescription = "삭제",
                         tint = FitGhostColors.TextSecondary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
             }
@@ -198,7 +201,7 @@ private fun CartItemCard(
                     contentDescription = item.productName,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(Spacing.lg))
                         .background(FitGhostColors.BgTertiary),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     error = androidx.compose.ui.graphics.painter.ColorPainter(FitGhostColors.BgTertiary),
@@ -256,7 +259,7 @@ private fun CartItemCard(
                     containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
                     contentColor = FitGhostColors.AccentPrimary
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(CornerRadius.md)
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -265,7 +268,7 @@ private fun CartItemCard(
                     Icon(
                         imageVector = Icons.Outlined.Checkroom,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                     Text(
                         text = "가상 피팅 해보기",
@@ -284,7 +287,7 @@ fun EmptyCartContent() {
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp)
+            .padding(Spacing.lg.times(1.25f))
             .softClay(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
         shape = RoundedCornerShape(28.dp)
@@ -336,7 +339,7 @@ fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modi
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(Spacing.xl),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -399,7 +402,7 @@ fun BottomPaymentSection(
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 결제 요약
@@ -451,7 +454,7 @@ fun BottomPaymentSection(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = FitGhostColors.AccentPrimary
                 ),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(Spacing.lg)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -460,7 +463,7 @@ fun BottomPaymentSection(
                     Icon(
                         imageVector = Icons.Outlined.Payment,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(IconSize.lg)
                     )
                     Text(
                         text = "순차 결제 시작",

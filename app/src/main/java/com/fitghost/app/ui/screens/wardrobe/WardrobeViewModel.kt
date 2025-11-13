@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.fitghost.app.data.db.WardrobeCategory
 import com.fitghost.app.data.db.WardrobeItemEntity
+import com.fitghost.app.data.db.CategoryEntity
 import com.fitghost.app.data.repository.WardrobeRepository
+import com.fitghost.app.data.repository.CategoryRepository
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,11 +28,14 @@ import kotlinx.coroutines.launch
  * Usage: val vm: WardrobeViewModel = viewModel(factory = WardrobeViewModelFactory(context)) val
  * state by vm.uiState.collectAsState()
  */
-class WardrobeViewModel(private val repo: WardrobeRepository) : ViewModel() {
+class WardrobeViewModel(
+    private val repo: WardrobeRepository,
+    private val categoryRepo: CategoryRepository
+) : ViewModel() {
 
     // UI filters
     data class WardrobeFilter(
-            val category: WardrobeCategory? = null,
+            val category: String? = null, // 카테고리 ID (예: "상의", "양말")
             val favoritesOnly: Boolean = false,
             val query: String = ""
     )
@@ -78,8 +82,16 @@ class WardrobeViewModel(private val repo: WardrobeRepository) : ViewModel() {
                             initialValue = WardrobeUiState()
                     )
 
+    // 카테고리 목록 (동적으로 가져오기)
+    val categories: StateFlow<List<CategoryEntity>> = categoryRepo.observeAll()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+    
     // region Filter actions
-    fun setCategory(category: WardrobeCategory?) {
+    fun setCategory(category: String?) {
         filter.update { it.copy(category = category) }
     }
 
@@ -93,6 +105,59 @@ class WardrobeViewModel(private val repo: WardrobeRepository) : ViewModel() {
 
     fun clearFilters() {
         filter.value = WardrobeFilter()
+    }
+
+    
+    /**
+     * 새 카테고리 추가
+     */
+    fun addCategory(categoryName: String) {
+        viewModelScope.launch {
+            categoryRepo.addCategory(id = categoryName, displayName = categoryName)
+        }
+    }
+
+    /**
+     * 새 카테고리 추가 (결과 콜백 버전 - UI 에러 표시 용)
+     */
+    fun addCategory(categoryName: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = categoryRepo.addCategory(id = categoryName, displayName = categoryName)
+            onResult(result.fold(
+                onSuccess = { Result.success(Unit) },
+                onFailure = { Result.failure(it) }
+            ))
+        }
+    }
+
+    /**
+     * 카테고리 이름 변경
+     */
+    fun renameCategory(oldId: String, newId: String, newDisplayName: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = categoryRepo.renameCategory(oldId, newId, newDisplayName)
+            onResult(result)
+        }
+    }
+
+    /**
+     * 카테고리 삭제
+     */
+    fun deleteCategory(categoryId: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = categoryRepo.deleteCategory(categoryId)
+            onResult(result)
+        }
+    }
+
+    /**
+     * 카테고리 재정렬 저장
+     */
+    fun reorderCategories(newOrderIds: List<String>, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = categoryRepo.reorderCategories(newOrderIds)
+            onResult(result)
+        }
     }
     // endregion
 
@@ -139,7 +204,8 @@ class WardrobeViewModelFactory(private val context: Context) : ViewModelProvider
     override fun <T : ViewModel> create(clazz: Class<T>): T {
         if (clazz.isAssignableFrom(WardrobeViewModel::class.java)) {
             val repo = WardrobeRepository.create(context.applicationContext)
-            return WardrobeViewModel(repo) as T
+            val categoryRepo = CategoryRepository(context.applicationContext)
+            return WardrobeViewModel(repo, categoryRepo) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${clazz.name}")
     }

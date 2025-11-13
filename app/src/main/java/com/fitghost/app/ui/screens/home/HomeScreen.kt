@@ -32,6 +32,9 @@ import com.fitghost.app.ui.components.SoftClayIconButton
 import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.components.softClayInset
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
+import com.fitghost.app.ui.theme.CornerRadius
 import com.fitghost.app.util.LocationProvider
 import kotlinx.coroutines.launch
 
@@ -195,10 +198,10 @@ private fun WeatherCard(
     Card(
         modifier = Modifier.fillMaxWidth().softClay(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(Spacing.xl)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(Spacing.lg.times(1.25f)),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
@@ -242,12 +245,12 @@ private fun WeatherCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onRefresh,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(CornerRadius.md)
                 ) { Text("새로고침") }
                 if (!hasLocationPermission) {
                     OutlinedButton(
                         onClick = onRequestPermission,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(CornerRadius.md)
                     ) { Text("위치 권한 요청") }
                 }
             }
@@ -369,10 +372,10 @@ private fun WardrobeBasedOutfitCard(
     Card(
         modifier = Modifier.fillMaxWidth().softClayInset(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 헤더
@@ -380,7 +383,7 @@ private fun WardrobeBasedOutfitCard(
                 Box(
                     modifier = Modifier
                         .size(64.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(Spacing.lg))
                         .background(FitGhostColors.BgTertiary),
                     contentAlignment = Alignment.Center
                 ) {
@@ -518,12 +521,12 @@ private fun WardrobeBasedOutfitCard(
             FilledTonalButton(
                 onClick = { onViewShop(outfit.shopQuery) },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(CornerRadius.md.plus(2.dp))
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Download,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(IconSize.md)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("더 많은 상품 보기")
@@ -550,10 +553,10 @@ private fun SearchBasedOutfitCard(
     Card(
         modifier = Modifier.fillMaxWidth().softClayInset(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(Spacing.lg.times(1.25f))
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 헤더
@@ -561,7 +564,7 @@ private fun SearchBasedOutfitCard(
                 Box(
                     modifier = Modifier
                         .size(64.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(Spacing.lg))
                         .background(FitGhostColors.AccentPrimary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -609,7 +612,7 @@ private fun SearchBasedOutfitCard(
             FilledTonalButton(
                 onClick = { onViewShop(outfit.shopQuery) },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(CornerRadius.md.plus(2.dp))
             ) {
                 Text(
                     text = "🛍️",
@@ -639,7 +642,7 @@ private fun WardrobeItemImageCard(
         modifier = Modifier
             .width(120.dp)
             .height(160.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(Spacing.lg),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
         onClick = onClick
     ) {
@@ -683,8 +686,8 @@ private fun WardrobeItemImageCard(
                     contentDescription = "즐겨찾기",
                     tint = FitGhostColors.AccentPrimary,
                     modifier = Modifier
-                        .padding(8.dp)
-                        .size(20.dp)
+                        .padding(Spacing.sm)
+                        .size(IconSize.md)
                         .align(Alignment.TopEnd)
                 )
             }
@@ -695,7 +698,7 @@ private fun WardrobeItemImageCard(
                     .fillMaxWidth()
                     .align(Alignment.BottomStart)
                     .background(FitGhostColors.BgSecondary.copy(alpha = 0.95f))
-                    .padding(8.dp),
+                    .padding(Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
@@ -736,7 +739,7 @@ private fun ProductImageCard(
         modifier = Modifier
             .width(120.dp)
             .height(160.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(Spacing.lg),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
         onClick = onClick
     ) {
@@ -761,7 +764,7 @@ private fun ProductImageCard(
                     .fillMaxWidth()
                     .align(Alignment.BottomStart)
                     .background(FitGhostColors.BgSecondary.copy(alpha = 0.95f))
-                    .padding(8.dp),
+                    .padding(Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
@@ -856,10 +859,10 @@ private fun SettingsDialog(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(CornerRadius.md)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(Spacing.lg),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
@@ -923,10 +926,10 @@ private fun SettingsDialog(
                             colors = CardDefaults.cardColors(
                                 containerColor = FitGhostColors.BgSecondary
                             ),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(CornerRadius.md)
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.padding(Spacing.lg),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
@@ -1009,11 +1012,11 @@ private fun SettingsDialog(
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         contentColor = MaterialTheme.colorScheme.error
                                     ),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = RoundedCornerShape(CornerRadius.md)
                                 ) {
                                     if (isDeleting) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(IconSize.sm),
                                             strokeWidth = 2.dp
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -1047,7 +1050,7 @@ private fun SettingsDialog(
                 Text("닫기")
             }
         },
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(Spacing.xl)
     )
     
     // 삭제 확인 다이얼로그
@@ -1103,7 +1106,7 @@ private fun SettingsDialog(
                     Text("취소")
                 }
             },
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(Spacing.lg.times(1.25f))
         )
     }
 }
@@ -1121,9 +1124,9 @@ private fun ModelDownloadBanner(
             Card(
                     modifier = cardModifier.softClay(),
                     colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(Spacing.xl)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(Spacing.lg.times(1.25f))) {
                     Text(
                             text = "AI 자동 완성 모델 준비 중",
                             style = MaterialTheme.typography.titleLarge,
@@ -1162,7 +1165,7 @@ private fun ModelDownloadBanner(
                                 modifier = Modifier
                                         .fillMaxWidth()
                                         .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
+                                        .clip(RoundedCornerShape(CornerRadius.sm)),
                                 color = FitGhostColors.AccentPrimary
                         )
                     } else {
@@ -1170,7 +1173,7 @@ private fun ModelDownloadBanner(
                                 modifier = Modifier
                                         .fillMaxWidth()
                                         .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
+                                        .clip(RoundedCornerShape(CornerRadius.sm)),
                                 color = FitGhostColors.AccentPrimary
                         )
                     }
@@ -1191,10 +1194,10 @@ private fun ModelDownloadBanner(
             Card(
                     modifier = cardModifier.softClay(),
                     colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(Spacing.xl)
             ) {
                 Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(Spacing.lg.times(1.25f)),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Row(
@@ -1205,7 +1208,7 @@ private fun ModelDownloadBanner(
                                 imageVector = Icons.Outlined.Download,
                                 contentDescription = null,
                                 tint = FitGhostColors.AccentPrimary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(IconSize.xl)
                         )
                         Text(
                                 text = "AI 자동 완성 모델 다운로드",
@@ -1226,7 +1229,7 @@ private fun ModelDownloadBanner(
                                     containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.15f),
                                     contentColor = FitGhostColors.AccentPrimary
                             ),
-                            shape = RoundedCornerShape(16.dp)
+                            shape = RoundedCornerShape(Spacing.lg)
                     ) {
                         Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),

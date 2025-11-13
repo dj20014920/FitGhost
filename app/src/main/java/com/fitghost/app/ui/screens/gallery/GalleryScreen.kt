@@ -24,6 +24,8 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.fitghost.app.data.LocalImageStore
 import com.fitghost.app.ui.theme.FitGhostColors
+import com.fitghost.app.ui.theme.Spacing
+import com.fitghost.app.ui.theme.IconSize
 import java.io.File
 
 /** 갤러리 화면 PRD: Try-On 결과 PNG를 Adaptive 그리드로 열람 폴더블/대화면에서 칼럼 자동 증가(2→3→4~6) */
@@ -80,14 +82,14 @@ private fun GalleryImageItem(path: String) {
     Card(
             modifier = Modifier.aspectRatio(0.75f), // 세로가 더 긴 비율
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(Spacing.lg)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // 이미지 placeholder
             Box(
                     modifier =
                             Modifier.fillMaxSize()
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(Spacing.lg))
                                     .background(FitGhostColors.BgTertiary),
                     contentAlignment = Alignment.Center
             ) {
@@ -127,7 +129,7 @@ private fun GalleryImageItem(path: String) {
                             context.startActivity(Intent.createChooser(share, "피팅 결과 공유"))
                         },
                         modifier =
-                                Modifier.size(32.dp)
+                                Modifier.size(44.dp)
                                         .background(
                                                 FitGhostColors.BgSecondary.copy(alpha = 0.9f),
                                                 RoundedCornerShape(8.dp)
@@ -175,7 +177,7 @@ private fun GalleryImageItem(path: String) {
                             }
                         },
                         modifier =
-                                Modifier.size(32.dp)
+                                Modifier.size(44.dp)
                                         .background(
                                                 FitGhostColors.BgSecondary.copy(alpha = 0.9f),
                                                 RoundedCornerShape(8.dp)
@@ -200,7 +202,7 @@ private fun GalleryImageItem(path: String) {
                             }
                         },
                         modifier =
-                                Modifier.size(32.dp)
+                                Modifier.size(44.dp)
                                         .background(
                                                 FitGhostColors.BgSecondary.copy(alpha = 0.9f),
                                                 RoundedCornerShape(8.dp)
@@ -221,7 +223,7 @@ private fun GalleryImageItem(path: String) {
 @Composable
 private fun EmptyGalleryContent(onNavigateToFitting: () -> Unit = {}) {
     Card(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(Spacing.lg),
             colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
             shape = RoundedCornerShape(24.dp)
     ) {
