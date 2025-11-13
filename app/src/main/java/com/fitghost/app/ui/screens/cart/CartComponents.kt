@@ -20,7 +20,7 @@ import com.fitghost.app.ui.components.softClay
 import com.fitghost.app.ui.theme.FitGhostColors
 
 /**
- * 몰별 장바구니 그룹 카드
+ * 몰별 장바구니 그룹 카드 - 개선된 UI/UX
  * PRD: 몰별 그룹핑 + 순차 결제 지원
  */
 @Composable
@@ -29,6 +29,7 @@ fun CartGroupCard(
     onUpdateQuantity: (String, Int) -> Unit,
     onRemoveItem: (String) -> Unit,
     onClearShopCart: () -> Unit,
+    onNavigateToFitting: (String) -> Unit = {},
     // 선택 기능 (선택 결제)
     selectable: Boolean = false,
     selectedItemIds: Set<String> = emptySet(),
@@ -43,97 +44,63 @@ fun CartGroupCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(28.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // 쇼핑몰 헤더
+            // 쇼핑몰 헤더 - 깔끔하게 이름만 표시
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (selectable) {
-                        val allSelected = group.items.all { selectedItemIds.contains(it.id) }
-                        val anySelected = group.items.any { selectedItemIds.contains(it.id) }
-                        TriStateCheckbox(
-                            state = when {
-                                allSelected -> androidx.compose.ui.state.ToggleableState.On
-                                anySelected -> androidx.compose.ui.state.ToggleableState.Indeterminate
-                                else -> androidx.compose.ui.state.ToggleableState.Off
-                            },
-                            onClick = { onToggleGroup?.invoke(!allSelected) }
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 쇼핑몰 아이콘
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(
-                                FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                                RoundedCornerShape(10.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Store,
-                            contentDescription = null,
-                            tint = FitGhostColors.AccentPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    
-                    Column {
-                        Text(
-                            text = group.shopName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = FitGhostColors.TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${group.items.size}개 상품 • ${group.totalPrice}원",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = FitGhostColors.TextSecondary
-                        )
-                    }
+                    Text(
+                        text = group.shopName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = FitGhostColors.TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${group.items.size}개 상품 • ${group.totalPrice.toKrw()}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = FitGhostColors.TextSecondary
+                    )
                 }
                 
                 // 쇼핑몰 장바구니 삭제 버튼
                 IconButton(
                     onClick = onClearShopCart,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(44.dp)
                         .background(
                             FitGhostColors.BgTertiary,
-                            RoundedCornerShape(8.dp)
+                            RoundedCornerShape(12.dp)
                         )
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.DeleteOutline,
                         contentDescription = "몰 장바구니 비우기",
                         tint = FitGhostColors.TextSecondary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
             
             // 상품 목록
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 group.items.forEach { item ->
                     CartItemCard(
                         item = item,
                         onUpdateQuantity = { quantity -> onUpdateQuantity(item.id, quantity) },
                         onRemove = { onRemoveItem(item.id) },
+                        onNavigateToFitting = onNavigateToFitting,
                         selectable = selectable,
                         selected = selectedItemIds.contains(item.id),
                         onToggleSelected = { checked -> onToggleItem?.invoke(item.id, checked) }
@@ -147,206 +114,216 @@ fun CartGroupCard(
                 onClick = { 
                     com.fitghost.app.util.Browser.open(ctx, group.shopUrl)
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp),
                 text = "${group.shopName}에서 결제하기 (${group.totalPrice.toKrw()})",
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             )
         }
     }
 }
 
 /**
- * 장바구니 아이템 카드
+ * 장바구니 아이템 카드 - 세로 레이아웃으로 깔끔하게 재구성
  */
 @Composable
 private fun CartItemCard(
     item: CartItem,
     onUpdateQuantity: (Int) -> Unit,
     onRemove: () -> Unit,
+    onNavigateToFitting: (String) -> Unit,
     selectable: Boolean,
     selected: Boolean,
     onToggleSelected: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgPrimary
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (selectable) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = { onToggleSelected(it) }
-                )
+            // 상단: 선택 체크박스와 삭제 버튼
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (selectable) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onToggleSelected(it) }
+                    )
+                } else {
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            FitGhostColors.BgTertiary,
+                            RoundedCornerShape(10.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.DeleteOutline,
+                        contentDescription = "삭제",
+                        tint = FitGhostColors.TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
-            // 상품 이미지 placeholder
+            
+            // 상품 이미지 - 중앙 정렬
             Box(
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(FitGhostColors.BgTertiary),
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Checkroom,
-                    contentDescription = null,
-                    tint = FitGhostColors.TextTertiary,
-                    modifier = Modifier.size(24.dp)
+                coil.compose.AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(item.productImageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = item.productName,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(FitGhostColors.BgTertiary),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    error = androidx.compose.ui.graphics.painter.ColorPainter(FitGhostColors.BgTertiary),
+                    placeholder = androidx.compose.ui.graphics.painter.ColorPainter(FitGhostColors.BgTertiary)
                 )
             }
             
-            // 상품 정보
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            // 상품 이름
+            Text(
+                text = item.productName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = FitGhostColors.TextPrimary,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            // 가격과 수량
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = item.productName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = FitGhostColors.TextPrimary,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
                     text = item.productPrice.toKrw(),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = FitGhostColors.AccentPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 
-                // 수량 조절
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 수량 감소 버튼
-                    IconButton(
-                        onClick = { 
-                            if (item.quantity > 1) {
-                                onUpdateQuantity(item.quantity - 1)
-                            }
-                        },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(
-                                FitGhostColors.BgTertiary,
-                                RoundedCornerShape(6.dp)
-                            ),
-                        enabled = item.quantity > 1
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Remove,
-                            contentDescription = "수량 감소",
-                            tint = if (item.quantity > 1) FitGhostColors.TextPrimary 
-                                  else FitGhostColors.TextTertiary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    
-                    // 수량 표시
+                if (item.quantity > 1) {
                     Text(
-                        text = item.quantity.toString(),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = FitGhostColors.TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.widthIn(min = 24.dp)
+                        text = "× ${item.quantity}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = FitGhostColors.TextSecondary,
+                        fontWeight = FontWeight.Medium
                     )
-                    
-                    // 수량 증가 버튼
-                    IconButton(
-                        onClick = { onUpdateQuantity(item.quantity + 1) },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(
-                                FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                                RoundedCornerShape(6.dp)
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = "수량 증가",
-                            tint = FitGhostColors.AccentPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
             }
             
-            // 삭제 버튼
-            IconButton(
-                onClick = onRemove,
+            // 가상피팅 버튼
+            Button(
+                onClick = {
+                    // FittingViewModel에 의상 이미지 URL 설정
+                    com.fitghost.app.ui.screens.fitting.FittingViewModel.getInstance()
+                        .setPendingClothingUrl(item.productImageUrl)
+                    // 피팅 화면으로 이동
+                    onNavigateToFitting(item.productImageUrl)
+                },
                 modifier = Modifier
-                    .size(36.dp)
-                    .background(
-                        FitGhostColors.BgTertiary,
-                        RoundedCornerShape(8.dp)
-                    )
+                    .fillMaxWidth()
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
+                    contentColor = FitGhostColors.AccentPrimary
+                ),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = "삭제",
-                    tint = FitGhostColors.TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Checkroom,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "가상 피팅 해보기",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
-/** 빈 장바구니 화면 (공용) */
+/** 빈 장바구니 화면 (공용) - 개선된 UI */
 @Composable
 fun EmptyCartContent() {
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(20.dp)
             .softClay(),
-        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgPrimary),
-        shape = RoundedCornerShape(24.dp)
+        colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
+        shape = RoundedCornerShape(28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(32.dp),
+                .padding(40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = Icons.Outlined.ShoppingCart,
                 contentDescription = null,
-                modifier = Modifier.size(96.dp),
+                modifier = Modifier.size(120.dp),
                 tint = FitGhostColors.TextTertiary
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Text(
                 text = "장바구니가 비어있습니다",
-                style = MaterialTheme.typography.titleLarge,
-                color = FitGhostColors.TextSecondary,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.headlineMedium,
+                color = FitGhostColors.TextPrimary,
+                fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "상점에서 마음에 드는 상품을 담아보세요",
-                style = MaterialTheme.typography.bodyMedium,
-                color = FitGhostColors.TextTertiary
+                style = MaterialTheme.typography.bodyLarge,
+                color = FitGhostColors.TextSecondary
             )
         }
     }
 }
 
-/** 장바구니 요약 카드 (공용) */
+/** 장바구니 요약 카드 (공용) - 개선된 UI */
 @Composable
 fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modifier) {
     Card(
@@ -354,16 +331,18 @@ fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modi
             .fillMaxWidth()
             .softClay(),
         colors = CardDefaults.cardColors(containerColor = FitGhostColors.BgSecondary),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
                     text = "🛒 장바구니 요약",
                     style = MaterialTheme.typography.headlineMedium,
@@ -372,24 +351,23 @@ fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modi
                 )
                 Text(
                     text = "총 ${totalItems}개 상품 • ${totalGroups}개 쇼핑몰",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FitGhostColors.TextSecondary,
-                    modifier = Modifier.padding(top = 4.dp)
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = FitGhostColors.TextSecondary
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(56.dp)
                     .background(
-                        FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                        RoundedCornerShape(12.dp)
+                        FitGhostColors.AccentPrimary.copy(alpha = 0.12f),
+                        RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = totalItems.toString(),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = FitGhostColors.AccentPrimary,
                     fontWeight = FontWeight.Bold
                 )
@@ -399,7 +377,7 @@ fun CartSummaryCard(totalItems: Int, totalGroups: Int, modifier: Modifier = Modi
 }
 
 /**
- * 하단 결제 섹션
+ * 하단 결제 섹션 - 개선된 UI/UX
  * PRD: 몰별 순차 결제 버튼
  */
 @Composable
@@ -418,11 +396,11 @@ fun BottomPaymentSection(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 결제 요약
             Row(
@@ -430,26 +408,38 @@ fun BottomPaymentSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = "총 ${totalItems}개 상품",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = FitGhostColors.TextSecondary
+                    )
+                    Text(
+                        text = totalPrice.toKrw(),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = FitGhostColors.TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "${groups.size}개 쇼핑몰",
                         style = MaterialTheme.typography.bodyMedium,
                         color = FitGhostColors.TextSecondary
                     )
-                Text(
-                    text = totalPrice.toKrw(),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = FitGhostColors.TextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
+                    Text(
+                        text = "순차 결제",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = FitGhostColors.AccentPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                
-                Text(
-                    text = "${groups.size}개 몰에서 순차 결제",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FitGhostColors.AccentPrimary,
-                    fontWeight = FontWeight.Medium
-                )
             }
             
             // 순차 결제 버튼
@@ -457,7 +447,7 @@ fun BottomPaymentSection(
                 onClick = { onStartPayment(groups) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp), // 충분한 터치 영역
+                    .height(60.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = FitGhostColors.AccentPrimary
                 ),
@@ -465,16 +455,16 @@ fun BottomPaymentSection(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Payment,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                     Text(
                         text = "순차 결제 시작",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }

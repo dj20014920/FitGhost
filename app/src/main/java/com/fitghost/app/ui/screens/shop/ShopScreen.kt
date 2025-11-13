@@ -40,6 +40,7 @@ import java.util.Locale
 @Composable
 fun ShopScreen(
         modifier: Modifier = Modifier,
+        onNavigateToFitting: () -> Unit = {},
         viewModel: ShopViewModel = viewModel(factory = ShopViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -140,6 +141,10 @@ fun ShopScreen(
                     ImageSearchPreview(
                         result = result,
                         onClear = viewModel::clearImageSearch,
+                        onCategoryClick = { category ->
+                            // 어울리는 아이템 클릭 시 해당 카테고리로 검색
+                            viewModel.updateSearchQuery(category)
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
@@ -347,6 +352,13 @@ fun ShopScreen(
                                         onClearShopCart = {
                                             scope.launch { cartRepo.clearShopCart(group.shopName) }
                                         },
+                                        onNavigateToFitting = { imageUrl ->
+                                            // FittingViewModel에 의상 이미지 URL 설정
+                                            com.fitghost.app.ui.screens.fitting.FittingViewModel.getInstance()
+                                                .setPendingClothingUrl(imageUrl)
+                                            // 피팅 화면으로 이동
+                                            onNavigateToFitting()
+                                        },
                                         selectable = true,
                                         selectedItemIds = selectedItemIds,
                                         onToggleGroup = { check ->
@@ -468,6 +480,7 @@ private fun SearchSection(
 private fun ImageSearchPreview(
     result: com.fitghost.app.data.repository.ImageSearchResult,
     onClear: () -> Unit,
+    onCategoryClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -526,7 +539,10 @@ private fun ImageSearchPreview(
                     result.matchingCategories.take(4).forEach { category ->
                         Surface(
                             color = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable { 
+                                onCategoryClick(category)
+                            }
                         ) {
                             Text(
                                 text = category,
@@ -1019,15 +1035,15 @@ private fun AIProductCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // 찜하기
+                // 찜하기 버튼 - 통일된 크기와 스타일
                 IconButton(
                     onClick = { onToggleWishlist() },
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .background(
-                            if (product.isWishlisted) FitGhostColors.AccentPrimary.copy(alpha = 0.1f)
+                            if (product.isWishlisted) FitGhostColors.AccentPrimary.copy(alpha = 0.12f)
                             else FitGhostColors.BgTertiary,
-                            RoundedCornerShape(8.dp)
+                            RoundedCornerShape(10.dp)
                         )
                 ) {
                     Icon(
@@ -1040,14 +1056,14 @@ private fun AIProductCard(
                     )
                 }
                 
-                // 장바구니
+                // 장바구니 버튼 - 통일된 크기와 스타일
                 IconButton(
                     onClick = { onAddToCart() },
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .background(
-                            FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                            RoundedCornerShape(8.dp)
+                            FitGhostColors.AccentPrimary.copy(alpha = 0.12f),
+                            RoundedCornerShape(10.dp)
                         )
                 ) {
                     Icon(

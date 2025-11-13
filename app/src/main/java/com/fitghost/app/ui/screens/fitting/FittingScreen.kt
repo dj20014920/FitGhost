@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.Checkroom
 import androidx.compose.material.icons.outlined.Close
@@ -56,6 +57,10 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
     val wardrobeViewModel: WardrobeViewModel =
             viewModel(factory = WardrobeViewModelFactory(context))
     val wardrobeUiState by wardrobeViewModel.uiState.collectAsState()
+    
+    // 피팅 ViewModel (장바구니에서 전달된 의상 URL 처리)
+    val fittingViewModel = remember { FittingViewModel.getInstance() }
+    val pendingClothingUrl by fittingViewModel.pendingClothingUrl.collectAsState()
 
     var modelUri by remember { mutableStateOf<Uri?>(null) }
     var clothingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -64,11 +69,45 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
     var showWardrobePicker by remember { mutableStateOf(false) }
     var showPreviewDialog by remember { mutableStateOf(false) }
     var lastSavedFile by remember { mutableStateOf<java.io.File?>(null) }
+    
+    // 최근 사용한 모델 사진
+    val recentModelPhotos by com.fitghost.app.data.settings.RecentModelPhotos
+        .getRecentPhotos(context)
+        .collectAsState(initial = emptyList())
+    
+    // 장바구니에서 전달된 의상 URL 처리
+    LaunchedEffect(pendingClothingUrl) {
+        pendingClothingUrl?.let { url ->
+            // URL을 Uri로 변환하여 clothingUris에 추가
+            try {
+                val uri = Uri.parse(url)
+                if (!clothingUris.contains(uri)) {
+                    clothingUris = clothingUris + uri
+                }
+                // URL 소비 (한 번만 사용)
+                fittingViewModel.consumePendingClothingUrl()
+                
+                // 사용자에게 알림
+                snackbarHostState.showSnackbar("의상 이미지가 추가되었습니다")
+            } catch (e: Exception) {
+                Log.e(FIT_TAG, "Failed to parse clothing URL: $url", e)
+                snackbarHostState.showSnackbar("이미지를 불러올 수 없습니다")
+            }
+        }
+    }
 
     val pickModelLauncher =
             rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.PickVisualMedia()
-            ) { uri -> modelUri = uri }
+            ) { uri -> 
+                uri?.let {
+                    modelUri = it
+                    // 최근 사용한 모델 사진에 추가
+                    scope.launch {
+                        com.fitghost.app.data.settings.RecentModelPhotos.addRecentPhoto(context, it)
+                    }
+                }
+            }
 
     val pickClothingLauncher =
             rememberLauncherForActivityResult(
@@ -162,12 +201,20 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
             item {
                 ModelImagePickSection(
                         selectedUri = modelUri,
+                        recentPhotos = recentModelPhotos,
                         onPick = {
                             pickModelLauncher.launch(
                                     PickVisualMediaRequest(
                                             ActivityResultContracts.PickVisualMedia.ImageOnly
                                     )
                             )
+                        },
+                        onSelectRecent = { uri ->
+                            modelUri = uri
+                            // 최근 사진 목록 업데이트 (맨 앞으로 이동)
+                            scope.launch {
+                                com.fitghost.app.data.settings.RecentModelPhotos.addRecentPhoto(context, uri)
+                            }
                         },
                         onClear = { modelUri = null }
                 )
@@ -207,9 +254,20 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                         value = systemPrompt,
                         onValueChange = { systemPrompt = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("고급 옵션: 프롬프트") },
-                        placeholder = { Text("예) 상의는 약간 루즈핏, 광택은 줄이고 자연광 느낌") },
-                        shape = RoundedCornerShape(12.dp)
+                        label = { Text("고급 옵션: 프롬프트 (선택사항)") },
+                        placeholder = { Text("입력하지 않으면 최적의 프롬프트를 자동으로 사용합니다") },
+                        supportingText = {
+                            Text(
+                                text = "예: 상의는 약간 루즈핏, 광택은 줄이고 자연광 느낌",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = FitGhostColors.TextTertiary
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = FitGhostColors.BgTertiary,
+                            focusedBorderColor = FitGhostColors.AccentPrimary
+                        )
                 )
             }
 
@@ -295,9 +353,15 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
     }
 }
 
-/** 모델 사진 선택 섹션 (사진 선택 버튼을 오른쪽에 배치) */
+/** 모델 사진 선택 섹션 (최근 사진 빠른 선택 + 사진 선택 버튼) */
 @Composable
-private fun ModelImagePickSection(selectedUri: Uri?, onPick: () -> Unit, onClear: () -> Unit) {
+private fun ModelImagePickSection(
+    selectedUri: Uri?, 
+    recentPhotos: List<Uri>,
+    onPick: () -> Unit, 
+    onSelectRecent: (Uri) -> Unit,
+    onClear: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // 제목과 사진 선택 버튼을 같은 행에 배치
         Row(
@@ -325,6 +389,43 @@ private fun ModelImagePickSection(selectedUri: Uri?, onPick: () -> Unit, onClear
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.padding(start = 16.dp)
             ) { Text("사진 선택") }
+        }
+        
+        // 최근 사용한 모델 사진 빠른 선택 (1x3 그리드)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "최근 사용한 모델",
+                style = MaterialTheme.typography.titleMedium,
+                color = FitGhostColors.TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            // 1x3 그리드 레이아웃
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 150.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 실제 최근 사진들 표시
+                items(recentPhotos.take(3)) { uri ->
+                    RecentModelPhotoItem(
+                        uri = uri,
+                        isSelected = selectedUri == uri,
+                        onSelect = { onSelectRecent(uri) }
+                    )
+                }
+                
+                // 빈 슬롯 채우기 (플레이스홀더)
+                val emptySlots = 3 - recentPhotos.size.coerceAtMost(3)
+                items(emptySlots) {
+                    EmptyRecentPhotoPlaceholder(
+                        onAddClick = onPick
+                    )
+                }
+            }
         }
 
         // 선택된 이미지 표시
@@ -452,6 +553,123 @@ private fun ClothingSelectionSection(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(text = "의상이 선택되지 않았습니다", color = FitGhostColors.TextSecondary)
                 }
+            }
+        }
+    }
+}
+
+/** 최근 모델 사진 아이템 (1x3 그리드용) */
+@Composable
+private fun RecentModelPhotoItem(
+    uri: Uri,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clickable { onSelect() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                FitGhostColors.AccentPrimary.copy(alpha = 0.1f)
+            } else {
+                FitGhostColors.BgSecondary
+            }
+        ),
+        border = if (isSelected) {
+            androidx.compose.foundation.BorderStroke(
+                2.dp,
+                FitGhostColors.AccentPrimary
+            )
+        } else null
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            SubcomposeAsyncImage(
+                model = uri,
+                contentDescription = "최근 모델 사진",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                loading = {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = FitGhostColors.AccentPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                },
+                error = {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.BrokenImage,
+                            contentDescription = null,
+                            tint = FitGhostColors.TextTertiary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            )
+
+            // 선택된 표시
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "선택됨",
+                    tint = FitGhostColors.AccentPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+/** 빈 최근 모델 사진 슬롯 플레이스홀더 */
+@Composable
+private fun EmptyRecentPhotoPlaceholder(
+    onAddClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clickable { onAddClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = FitGhostColors.BgSecondary
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            FitGhostColors.TextTertiary.copy(alpha = 0.3f)
+        )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AddAPhoto,
+                    contentDescription = "사진 추가",
+                    tint = FitGhostColors.TextTertiary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(28.dp)
+                )
+                Text(
+                    text = "사진 추가",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FitGhostColors.TextTertiary.copy(alpha = 0.7f)
+                )
             }
         }
     }

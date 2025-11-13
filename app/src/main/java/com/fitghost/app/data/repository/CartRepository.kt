@@ -1,14 +1,14 @@
 package com.fitghost.app.data.repository
 
+import com.fitghost.app.data.local.CartDao
+import com.fitghost.app.data.local.CartItemEntity
 import com.fitghost.app.data.model.CartGroup
 import com.fitghost.app.data.model.CartItem
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-/** 장바구니 Repository PRD: 로컬 장바구니(몰별 그룹) + 순차 결제 지원 */
+/** 장바구니 Repository PRD: 로컬 장바구니(몰별 그룹) + 순차 결제 지원 + 영속성 저장 */
 interface CartRepository {
     val cartItems: Flow<List<CartItem>>
     val cartGroups: Flow<List<CartGroup>>
@@ -21,82 +21,78 @@ interface CartRepository {
     suspend fun clearShopCart(shopName: String)
 }
 
-/** Cart Repository 구현체 현재: 메모리 저장, 추후: Room DB 연동 가능 */
-class CartRepositoryImpl : CartRepository {
+/** Cart Repository 구현체 - Room DB 기반 영속성 저장 */
+class CartRepositoryImpl(private val cartDao: CartDao) : CartRepository {
 
-    private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
-    override val cartItems: Flow<List<CartItem>> = _cartItems.asStateFlow()
-
-    override val cartGroups: Flow<List<CartGroup>> =
-            cartItems.map { items ->
-                items
-                        .groupBy { it.shopName }
-                        .map { (shopName, shopItems) ->
-                            CartGroup(
-                                    shopName = shopName,
-                                    shopUrl = shopItems.firstOrNull()?.shopUrl ?: "",
-                                    items = shopItems
-                            )
-                        }
-                        .sortedBy { it.shopName }
-            }
-
-    override val totalItemCount: Flow<Int> = cartItems.map { items -> items.sumOf { it.quantity } }
-
-    override suspend fun addToCart(item: CartItem) {
-        delay(100) // 네트워크 지연 시뮬레이션
-
-        val currentItems = _cartItems.value.toMutableList()
-        val existingItemIndex =
-                currentItems.indexOfFirst {
-                    it.productId == item.productId && it.shopName == item.shopName
-                }
-
-        if (existingItemIndex != -1) {
-            // 기존 아이템이 있으면 수량 증가
-            val existingItem = currentItems[existingItemIndex]
-            currentItems[existingItemIndex] =
-                    existingItem.copy(quantity = existingItem.quantity + item.quantity)
-        } else {
-            // 새 아이템 추가
-            currentItems.add(item.copy(id = generateCartItemId()))
+    override val cartItems: Flow<List<CartItem>> = 
+        cartDao.getAllCartItems().map { entities ->
+            entities.map { it.toCartItem() }
         }
 
-        _cartItems.value = currentItems
+    override val cartGroups: Flow<List<CartGroup>> =
+        cartItems.map { items ->
+            items
+                .groupBy { it.shopName }
+                .map { (shopName, shopItems) ->
+                    CartGroup(
+                        shopName = shopName,
+                        shopUrl = shopItems.firstOrNull()?.shopUrl ?: "",
+                        items = shopItems
+                    )
+                }
+                .sortedBy { it.shopName }
+        }
+
+    override val totalItemCount: Flow<Int> = 
+        cartItems.map { items -> items.sumOf { it.quantity } }
+
+    override suspend fun addToCart(item: CartItem) {
+        // Flow의 첫 번째 값만 가져오기
+        val currentItems = cartDao.getAllCartItems().first()
+        
+        val existingItem = currentItems.firstOrNull {
+            it.productId == item.productId && it.shopName == item.shopName
+        }
+
+        if (existingItem != null) {
+            // 기존 아이템이 있으면 수량 증가
+            val updated = existingItem.copy(
+                quantity = existingItem.quantity + item.quantity
+            )
+            cartDao.updateCartItem(updated)
+        } else {
+            // 새 아이템 추가
+            val newItem = item.copy(
+                id = if (item.id.isEmpty()) generateCartItemId() else item.id
+            )
+            cartDao.insertCartItem(newItem.toEntity())
+        }
     }
 
     override suspend fun removeFromCart(itemId: String) {
-        delay(100)
-
-        _cartItems.value = _cartItems.value.filter { it.id != itemId }
+        cartDao.deleteCartItem(itemId)
     }
 
     override suspend fun updateQuantity(itemId: String, quantity: Int) {
-        delay(100)
-
         if (quantity <= 0) {
             removeFromCart(itemId)
             return
         }
 
-        _cartItems.value =
-                _cartItems.value.map { item ->
-                    if (item.id == itemId) {
-                        item.copy(quantity = quantity)
-                    } else {
-                        item
-                    }
-                }
+        // Flow의 첫 번째 값만 가져오기
+        val items = cartDao.getAllCartItems().first()
+        val item = items.firstOrNull { it.id == itemId }
+        if (item != null) {
+            cartDao.updateCartItem(item.copy(quantity = quantity))
+        }
     }
 
     override suspend fun clearCart() {
-        delay(100)
-        _cartItems.value = emptyList()
+        cartDao.clearAllCartItems()
     }
 
     override suspend fun clearShopCart(shopName: String) {
-        delay(100)
-        _cartItems.value = _cartItems.value.filter { it.shopName != shopName }
+        cartDao.deleteCartItemsByShop(shopName)
     }
 
     private fun generateCartItemId(): String {
@@ -104,7 +100,47 @@ class CartRepositoryImpl : CartRepository {
     }
 }
 
+// Entity <-> Model 변환 확장 함수
+private fun CartItemEntity.toCartItem(): CartItem = CartItem(
+    id = id,
+    productId = productId,
+    productName = productName,
+    productPrice = productPrice,
+    productImageUrl = productImageUrl,
+    shopName = shopName,
+    shopUrl = shopUrl,
+    source = source,
+    deeplink = deeplink,
+    quantity = quantity,
+    addedAt = addedAt
+)
+
+private fun CartItem.toEntity(): CartItemEntity = CartItemEntity(
+    id = id,
+    productId = productId,
+    productName = productName,
+    productPrice = productPrice,
+    productImageUrl = productImageUrl,
+    shopName = shopName,
+    shopUrl = shopUrl,
+    source = source,
+    deeplink = deeplink,
+    quantity = quantity,
+    addedAt = addedAt
+)
+
 // 전역에서 공유할 수 있는 CartRepository Provider (간단 DI)
 object CartRepositoryProvider {
-    val instance: CartRepository by lazy { CartRepositoryImpl() }
+    private var _instance: CartRepository? = null
+    
+    fun initialize(cartDao: CartDao) {
+        if (_instance == null) {
+            _instance = CartRepositoryImpl(cartDao)
+        }
+    }
+    
+    val instance: CartRepository
+        get() = _instance ?: throw IllegalStateException(
+            "CartRepositoryProvider must be initialized first"
+        )
 }

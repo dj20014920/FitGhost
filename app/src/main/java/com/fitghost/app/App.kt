@@ -1,9 +1,22 @@
 package com.fitghost.app
 
 import android.app.Application
+import com.fitghost.app.data.local.AppDatabase
+import com.fitghost.app.data.repository.CartRepositoryProvider
 
 /**
  * FitGhost 애플리케이션 클래스
- * - 광고 및 크레딧 기능 제거 후 기본 Application 초기화만 수행
+ * - 데이터베이스 및 Repository 초기화
  */
-class App : Application()
+class App : Application() {
+    
+    override fun onCreate() {
+        super.onCreate()
+        
+        // Room Database 초기화
+        val database = AppDatabase.getInstance(this)
+        
+        // CartRepository 초기화
+        CartRepositoryProvider.initialize(database.cartDao())
+    }
+}

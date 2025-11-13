@@ -75,6 +75,10 @@ object ProductSearchEngine {
                 query = query,
                 num = 10
             ).items?.mapNotNull { it.toProduct() } ?: emptyList()
+        } catch (e: retrofit2.HttpException) {
+            // HTTP 500 등 서버 에러는 조용히 처리 (Naver 검색 결과만 사용)
+            Log.w(TAG, "Google search API unavailable (HTTP ${e.code()}), using Naver results only")
+            emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Google search failed", e)
             emptyList()

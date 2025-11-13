@@ -25,6 +25,7 @@ import com.fitghost.app.ui.theme.FitGhostColors
 @Composable
 fun CartScreen(
         onNavigateBack: () -> Unit = {},
+        onNavigateToFitting: (String) -> Unit = {},
         modifier: Modifier = Modifier,
         viewModel: CartViewModel = viewModel(factory = CartViewModelFactory())
 ) {
@@ -70,8 +71,8 @@ fun CartScreen(
             // 장바구니 내용
             LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    contentPadding = PaddingValues(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // 요약 정보
                 item { CartSummaryCard(totalItems = totalItemCount, totalGroups = cartGroups.size) }
@@ -82,9 +83,13 @@ fun CartScreen(
                             group = group,
                             onUpdateQuantity = viewModel::updateQuantity,
                             onRemoveItem = viewModel::removeItem,
-                            onClearShopCart = { viewModel.clearShopCart(group.shopName) }
+                            onClearShopCart = { viewModel.clearShopCart(group.shopName) },
+                            onNavigateToFitting = onNavigateToFitting
                     )
                 }
+                
+                // 하단 여유 공간
+                item { Spacer(modifier = Modifier.height(100.dp)) }
             }
 
             // 하단 결제 버튼

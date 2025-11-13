@@ -198,13 +198,23 @@ static std::string generate_greedy_json(
         if (n < 0) return std::string("{}");
         ALOGI("gen_json: tokenized need=%d, n=%d", (int)need, (int)n);
 
-        struct llama_batch b = llama_batch_get_one(toks.data(), n);
-        // 절대 위치 보정
-        for (int i = 0; i < n; ++i) b.pos[i] = n_past + i;
+        // 안전한 배치 초기화 경로 (get_one 대신 init 사용)
+        llama_batch b = llama_batch_init(n, /*embd*/ 0, /*n_seq_max*/ 1);
+        // 토큰/위치/시퀀스/로그릿 설정
+        for (int i = 0; i < n; ++i) {
+            b.token[i] = toks[i];
+            b.pos[i]   = n_past + i;
+            b.n_seq_id[i] = 1;
+            b.seq_id[i][0] = 0;
+            b.logits[i] = (i == n - 1) ? 1 : 0; // 마지막 토큰만 logits 계산
+        }
+        b.n_tokens = n;
         if (llama_decode(g_ctx, b) != 0) {
             ALOGW("gen_json: llama_decode(prompt) failed");
+            llama_batch_free(b);
             return std::string("{}");
         }
+        llama_batch_free(b);
         n_past += n;
     }
 
@@ -213,7 +223,10 @@ static std::string generate_greedy_json(
 
     for (int i = 0; i < max_tokens; ++i) {
         float * logits = llama_get_logits(g_ctx);
-        if (!logits) break;
+        if (!logits) {
+            ALOGW("gen_json: llama_get_logits returned NULL at i=%d", i);
+            break;
+        }
         const int32_t n_vocab = llama_vocab_n_tokens(vocab);
         if (n_vocab <= 0) break;
         // argmax 샘플링 (JSON 안정성을 위해 탐욕적)
@@ -230,12 +243,19 @@ static std::string generate_greedy_json(
 
         // 다음 토큰을 올바른 절대 위치에 디코드
         llama_token ntok = best;
-        struct llama_batch nb = llama_batch_get_one(&ntok, 1);
-        nb.pos[0] = n_past; // 중요: pos를 누적 길이로 설정
+        llama_batch nb = llama_batch_init(1, /*embd*/ 0, /*n_seq_max*/ 1);
+        nb.token[0] = ntok;
+        nb.pos[0]   = n_past; // 중요: pos를 누적 길이로 설정
+        nb.n_seq_id[0] = 1;
+        nb.seq_id[0][0] = 0;
+        nb.logits[0] = 1;   // 중요: logits 계산 활성화
+        nb.n_tokens = 1;
         if (llama_decode(g_ctx, nb) != 0) {
             ALOGW("gen_json: llama_decode(next) failed at i=%d", i);
+            llama_batch_free(nb);
             break;
         }
+        llama_batch_free(nb);
         n_past += 1;
     }
     ALOGI("gen_json: done, out_len=%zu", out.size());

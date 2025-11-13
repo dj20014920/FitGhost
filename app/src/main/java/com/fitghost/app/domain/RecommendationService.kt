@@ -47,6 +47,7 @@ class RecommendationService(
     private val wardrobeRepository: WardrobeRepository,
     private val weatherRepo: WeatherRepo,
     private val productSearchDataSource: ProductSearchDataSource,
+    private val context: android.content.Context,
     private val outfitRecommender: OutfitRecommender = OutfitRecommender(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -180,14 +181,20 @@ class RecommendationService(
         val queries = buildSearchQueries(plan)
         if (queries.isEmpty()) return emptyList()
 
+        // 성별 정보 가져오기
+        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(context)
+
         val results = mutableListOf<Product>()
         
         // 각 검색어마다 다른 시드 사용하여 다양한 결과 확보
         queries.forEachIndexed { index, query ->
             if (results.size >= limit) return@forEachIndexed
             
+            // 성별 태그를 검색어에 추가
+            val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+            
             val products = productSearchDataSource.searchProducts(
-                query, 
+                enrichedQuery, 
                 limit = limit
             )
             
@@ -288,11 +295,15 @@ class RecommendationService(
         weather: WeatherSnapshot,
         dailySeed: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000)
     ): List<HomeOutfitRecommendation> {
+        // 성별 정보 가져오기
+        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(context)
         val queries = defaultQueriesFor(weather)
         val outfits = mutableListOf<HomeOutfitRecommendation>()
         queries.forEachIndexed { index, query ->
             val searchSeed = dailySeed * 1000 + index + 500
-            val products = productSearchDataSource.searchProducts(query, limit = 4)
+            // 성별 태그를 검색어에 추가
+            val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+            val products = productSearchDataSource.searchProducts(enrichedQuery, limit = 4)
                 .shuffled(kotlin.random.Random(searchSeed))
                 .take(4)
             
@@ -316,11 +327,15 @@ class RecommendationService(
         weather: WeatherSnapshot,
         dailySeed: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000)
     ): List<OutfitRecommendation> {
+        // 성별 정보 가져오기
+        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(context)
         val queries = defaultQueriesFor(weather)
         val recommendations = mutableListOf<OutfitRecommendation>()
         queries.forEachIndexed { index, query ->
             val searchSeed = dailySeed * 1000 + index + 200
-            val products = productSearchDataSource.searchProducts(query, limit = 6)
+            // 성별 태그를 검색어에 추가
+            val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
+            val products = productSearchDataSource.searchProducts(enrichedQuery, limit = 6)
                 .shuffled(kotlin.random.Random(searchSeed))
                 .take(6)
             

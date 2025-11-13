@@ -83,11 +83,11 @@ class HomeViewModelFactory(
             val recommendationService = RecommendationService(
                 wardrobeRepository = wardrobeRepository,
                 weatherRepo = weatherRepo,
+                context = appContext,
                 productSearchDataSource = object : RecommendationService.ProductSearchDataSource {
                     override suspend fun searchProducts(query: String, limit: Int): List<Product> {
-                        val genderTag = com.fitghost.app.data.settings.UserSettings.getGenderKoTag(appContext)
-                        val enrichedQuery = if (!genderTag.isNullOrBlank()) "$genderTag $query" else query
-                        return ProductSearchEngine.search(enrichedQuery, maxResults = limit)
+                        // 여기서는 이미 성별 태그가 추가된 쿼리를 받으므로 그대로 전달
+                        return ProductSearchEngine.search(query, maxResults = limit)
                     }
                 }
             )
