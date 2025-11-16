@@ -26,7 +26,7 @@ endif()
 # Prefer local llama.cpp under .work-llama, then fallback to module-local copy
 set(LLAMA_LOCAL_DIR "")
 set(_LLAMA_CANDIDATES
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.work-llama/llama.cpp" # ghostfit/.work-llama/llama.cpp
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.work-llama/llama.cpp" # tryon/.work-llama/llama.cpp
   "${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp"                         # app/src/main/cpp/llama.cpp
 )
 foreach(_cand IN LISTS _LLAMA_CANDIDATES)

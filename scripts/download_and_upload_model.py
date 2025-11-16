@@ -23,7 +23,7 @@ MODEL_FILENAME = "SmolVLM-500M-Instruct-f16.gguf"
 MMPROJ_URL = "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/main/SmolVLM-500M-Instruct-mmproj.gguf"
 MMPROJ_FILENAME = "SmolVLM-500M-Instruct-mmproj.gguf"
 
-LOCAL_DIR = "./ghostfit_models"
+LOCAL_DIR = "./tryon_models"
 R2_BUCKET = "ghostfit-models"
 R2_KEY = "SmolVLM-500M-Instruct-f16.gguf"  # 버킷 루트에 직접 배치
 R2_MMPROJ_KEY = "SmolVLM-500M-Instruct-mmproj.gguf"  # 버킷 루트에 직접 배치(선택)

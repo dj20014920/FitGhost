@@ -1,4 +1,4 @@
-# FitGhost - 가상 피팅 앱 📱✨
+# TryOn - 가상 피팅 앱 📱✨
 
 ## 🚨 빌드 주의: 무한 빌드/빌드 취소 방지
 
@@ -1481,7 +1481,7 @@ TRYON_MAX_SIDE_PX=1024
 
 ## 📱 앱 개요
 
-FitGhost는 Kotlin + Jetpack Compose 기반의 혁신적인 가상 피팅 앱입니다. 사용자의 디지털 옷장을 관리하고, AI를 통한 코디 추천, 가상 피팅 기능을 제공합니다.
+TryOn은 Kotlin + Jetpack Compose 기반의 혁신적인 가상 피팅 앱입니다. 사용자의 디지털 옷장을 관리하고, AI를 통한 코디 추천, 가상 피팅 기능을 제공합니다.
 
 ### 🎯 핵심 기능
 
@@ -1595,7 +1595,7 @@ app/src/main/java/com/fitghost/app/
 ```bash
 # 프로젝트 클론
 git clone [repository-url]
-cd ghostfit
+cd tryon
 
 # 의존성 다운로드 및 빌드
 ./gradlew build
@@ -1794,7 +1794,7 @@ class ShopRepositoryImpl : ShopRepository {
 
 ## 📞 문의 및 지원
 
-- **개발팀**: FitGhost Development Team
+- **개발팀**: TryOn Development Team
 - **GitHub Issues**: 버그 리포트 및 기능 요청
 - **기술 문서**: 이 README를 참조
 

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FitGhost"
+rootProject.name = "TryOn"
 include(":app")

@@ -1,4 +1,4 @@
-FitGhost — Android MVP 통합 PRD (Unified, Cloud-only)
+TryOn — Android MVP 통합 PRD (Unified, Cloud-only)
 
 역할/목표
 •	역할: Android 시니어 개발자 에이전트

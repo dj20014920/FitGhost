@@ -45,7 +45,7 @@ ensure_shop() {
   local i=0
   while [[ $i -lt 3 ]]; do
     dump
-    local has_title=$(python3 parse_ui.py count --text "FitGhost Shop" window_dump.xml || true)
+    local has_title=$(python3 parse_ui.py count --text "TryOn Shop" window_dump.xml || true)
     local c_search=$(python3 parse_ui.py count --text "검색" window_dump.xml || true)
     local c_reco=$(python3 parse_ui.py count --text "추천" window_dump.xml || true)
     local c_wish=$(python3 parse_ui.py count --text "위시리스트" window_dump.xml || true)

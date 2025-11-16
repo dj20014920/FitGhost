@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="Theme.Ghostfit" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.TryOn" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Compose/Material3 호환 기본 테마. AppCompat 대체 -->
         <item name="colorPrimary">@color/purple_500</item>
         <item name="colorPrimaryVariant">@color/purple_700</item>

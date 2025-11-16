@@ -10,7 +10,7 @@ import sys
 # 모델 정보
 MODEL_URL = "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/main/SmolVLM-500M-Instruct-f16.gguf"
 MODEL_FILENAME = "SmolVLM-500M-Instruct-f16.gguf"
-LOCAL_DIR = "./ghostfit_models"
+LOCAL_DIR = "./tryon_models"
 
 def main():
     """wget를 이용한 빠른 다운로드"""

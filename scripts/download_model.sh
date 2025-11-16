@@ -3,7 +3,7 @@
 # SmolVLM 모델 다운로드 (wget 재시작 지원)
 MODEL_URL="https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/main/SmolVLM-500M-Instruct-f16.gguf"
 MMPROJ_URL="https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/main/SmolVLM-500M-Instruct-mmproj.gguf"
-LOCAL_DIR="./ghostfit_models"
+LOCAL_DIR="./tryon_models"
 MODEL_FILE="${LOCAL_DIR}/SmolVLM-500M-Instruct-f16.gguf"
 MMPROJ_FILE="${LOCAL_DIR}/SmolVLM-500M-Instruct-mmproj.gguf"
 

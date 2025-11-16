@@ -1,6 +1,6 @@
 /**
- * Cloudflare Workers Proxy for FitGhost App - Vertex AI Edition
- * 
+ * Cloudflare Workers Proxy for TryOn App - Vertex AI Edition
+ *
  * Vertex AI로 전환하여 지역 제한 문제 해결
  * OAuth 2.0 Service Account 인증 사용
  */

@@ -14,7 +14,7 @@ fi
 # R2 설정 (엔드포인트/버킷/키는 필요 시 인자로 재정의 가능)
 R2_ENDPOINT=${R2_ENDPOINT:-"https://081a9810680543ee912eb54ae15876a3.r2.cloudflarestorage.com"}
 BUCKET_NAME=${BUCKET_NAME:-"ghostfit-models"}
-LOCAL_FILE=${LOCAL_FILE:-"./ghostfit_models/SmolVLM-500M-Instruct-f16.gguf"}
+LOCAL_FILE=${LOCAL_FILE:-"./tryon_models/SmolVLM-500M-Instruct-f16.gguf"}
 R2_KEY=${R2_KEY:-"SmolVLM-500M-Instruct-f16.gguf"}  # 버킷 루트에 직접 배치
 
 echo "============================================================"

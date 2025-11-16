@@ -133,7 +133,7 @@ def list_bucket_contents():
             models_files = []
             ghostfit_files = []
             other_files = []
-            
+
             for obj in response['Contents']:
                 size_mb = obj['Size'] / (1024 * 1024)
                 if obj['Key'].startswith('models/'):
@@ -142,12 +142,12 @@ def list_bucket_contents():
                     ghostfit_files.append((obj['Key'], size_mb))
                 else:
                     other_files.append((obj['Key'], size_mb))
-            
+
             if models_files:
                 print("[기존 models 폴더]")
                 for key, size in models_files:
                     print(f"  - {key}: {size:.2f} MB")
-            
+
             if ghostfit_files:
                 print("\n[ghostfit_models 폴더]")
                 for key, size in ghostfit_files:
