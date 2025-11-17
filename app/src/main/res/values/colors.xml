@@ -10,7 +10,7 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- FitGhost Soft Clay colors -->
+    <!-- TryOn Soft Clay colors -->
     <color name="fitghost_bg_primary">#F0F2F5</color>
     <color name="fitghost_bg_secondary">#FFFFFF</color>
     <color name="fitghost_bg_tertiary">#E4E6EB</color>

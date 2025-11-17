@@ -115,7 +115,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "FitGhost",
+                            text = "TryOn",
                             style = MaterialTheme.typography.displayLarge,
                             color = FitGhostColors.TextPrimary,
                             fontWeight = FontWeight.Black

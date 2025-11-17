@@ -369,6 +369,163 @@ fun ProductCard(
 }
 
 /**
+ * 위시리스트 전용 상품 카드 - 가상피팅 버튼 포함
+ * 장바구니의 가상피팅 버튼 로직을 위시리스트에 통합
+ */
+@Composable
+fun WishlistProductCard(
+    product: Product,
+    onAddToCart: () -> Unit,
+    onToggleWishlist: () -> Unit,
+    onNavigateToFitting: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .softClay(),
+        colors = CardDefaults.cardColors(
+            containerColor = FitGhostColors.BgSecondary
+        ),
+        shape = RoundedCornerShape(Spacing.lg)
+    ) {
+        Row(
+            modifier = Modifier.padding(Spacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 상품 이미지
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(CornerRadius.md))
+                    .background(FitGhostColors.BgTertiary),
+                contentAlignment = Alignment.Center
+            ) {
+                if (product.imageUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(product.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = product.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Checkroom,
+                        contentDescription = null,
+                        tint = FitGhostColors.TextTertiary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            
+            // 상품 정보
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = product.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = FitGhostColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${product.price}원",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = FitGhostColors.AccentPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = product.shopName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FitGhostColors.TextSecondary
+                )
+                
+                // 액션 버튼들 - 하트, 가상피팅, 담기 순서
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    // 찜하기 버튼 (하트)
+                    IconButton(
+                        onClick = onToggleWishlist,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                if (product.isWishlisted) FitGhostColors.AccentPrimary.copy(alpha = 0.12f)
+                                else FitGhostColors.BgTertiary,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .semantics { contentDescription = "찜하기" }
+                    ) {
+                        Icon(
+                            imageVector = if (product.isWishlisted) Icons.Outlined.Favorite 
+                                         else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "찜하기",
+                            tint = if (product.isWishlisted) FitGhostColors.AccentPrimary 
+                                  else FitGhostColors.TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    
+                    // 가상피팅 버튼
+                    IconButton(
+                        onClick = {
+                            // FittingViewModel에 의상 이미지 URL 설정
+                            com.fitghost.app.ui.screens.fitting.FittingViewModel.getInstance()
+                                .setPendingClothingUrl(product.imageUrl)
+                            // 피팅 화면으로 이동
+                            onNavigateToFitting(product.imageUrl)
+                        },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                FitGhostColors.AccentPrimary.copy(alpha = 0.12f),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .semantics { contentDescription = "가상피팅" }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Checkroom,
+                            contentDescription = "가상피팅",
+                            tint = FitGhostColors.AccentPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    
+                    // 장바구니 담기 버튼
+                    IconButton(
+                        onClick = onAddToCart,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                FitGhostColors.AccentPrimary.copy(alpha = 0.12f),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .semantics { contentDescription = "장바구니" }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ShoppingCart,
+                            contentDescription = "장바구니",
+                            tint = FitGhostColors.AccentPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * 로딩 섹션
  */
 @Composable

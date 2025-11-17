@@ -32,7 +32,6 @@ fun CartGroupCard(
     onUpdateQuantity: (String, Int) -> Unit,
     onRemoveItem: (String) -> Unit,
     onClearShopCart: () -> Unit,
-    onNavigateToFitting: (String) -> Unit = {},
     // 선택 기능 (선택 결제)
     selectable: Boolean = false,
     selectedItemIds: Set<String> = emptySet(),
@@ -103,7 +102,6 @@ fun CartGroupCard(
                         item = item,
                         onUpdateQuantity = { quantity -> onUpdateQuantity(item.id, quantity) },
                         onRemove = { onRemoveItem(item.id) },
-                        onNavigateToFitting = onNavigateToFitting,
                         selectable = selectable,
                         selected = selectedItemIds.contains(item.id),
                         onToggleSelected = { checked -> onToggleItem?.invoke(item.id, checked) }
@@ -135,7 +133,6 @@ private fun CartItemCard(
     item: CartItem,
     onUpdateQuantity: (Int) -> Unit,
     onRemove: () -> Unit,
-    onNavigateToFitting: (String) -> Unit,
     selectable: Boolean,
     selected: Boolean,
     onToggleSelected: (Boolean) -> Unit,
@@ -239,41 +236,6 @@ private fun CartItemCard(
                         style = MaterialTheme.typography.bodyLarge,
                         color = FitGhostColors.TextSecondary,
                         fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-            
-            // 가상피팅 버튼
-            Button(
-                onClick = {
-                    // FittingViewModel에 의상 이미지 URL 설정
-                    com.fitghost.app.ui.screens.fitting.FittingViewModel.getInstance()
-                        .setPendingClothingUrl(item.productImageUrl)
-                    // 피팅 화면으로 이동
-                    onNavigateToFitting(item.productImageUrl)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = FitGhostColors.AccentPrimary.copy(alpha = 0.1f),
-                    contentColor = FitGhostColors.AccentPrimary
-                ),
-                shape = RoundedCornerShape(CornerRadius.md)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Checkroom,
-                        contentDescription = null,
-                        modifier = Modifier.size(IconSize.md)
-                    )
-                    Text(
-                        text = "가상 피팅 해보기",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
                     )
                 }
             }

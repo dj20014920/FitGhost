@@ -142,7 +142,7 @@ Java_com_fitghost_app_ai_EmbeddedLlamaServer_nativeInit(
         mp.use_gpu = false; // Vulkan 기본 OFF
         mp.print_timings = false;
         mp.n_threads = g_n_threads;
-        mp.verbosity = GGML_LOG_LEVEL_WARN;
+        // mp.verbosity는 최신 llama.cpp에서 제거됨 (로깅은 기본값 사용)
         mp.media_marker = mtmd_default_marker();
         g_mtmd = mtmd_init_from_file(mmproj, g_model, mp);
         if (!g_mtmd) {

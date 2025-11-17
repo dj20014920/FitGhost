@@ -28,8 +28,9 @@ object GeminiTagger {
     private const val DETAIL_CONF_THRESHOLD = 0.45
 
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(java.time.Duration.ofSeconds(30))
-        .readTimeout(java.time.Duration.ofSeconds(60))
+        .connectTimeout(java.time.Duration.ofSeconds(15))  // 30초 -> 15초 (연결 시간 단축)
+        .readTimeout(java.time.Duration.ofSeconds(30))     // 60초 -> 30초 (응답 대기 시간 단축)
+        .writeTimeout(java.time.Duration.ofSeconds(15))    // 요청 전송 시간 제한 추가
         .build()
 
     /**

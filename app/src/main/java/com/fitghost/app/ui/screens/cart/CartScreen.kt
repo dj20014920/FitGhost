@@ -27,7 +27,6 @@ import com.fitghost.app.ui.theme.Spacing
 @Composable
 fun CartScreen(
         onNavigateBack: () -> Unit = {},
-        onNavigateToFitting: (String) -> Unit = {},
         modifier: Modifier = Modifier,
         viewModel: CartViewModel = viewModel(factory = CartViewModelFactory())
 ) {
@@ -81,8 +80,7 @@ fun CartScreen(
                             group = group,
                             onUpdateQuantity = viewModel::updateQuantity,
                             onRemoveItem = viewModel::removeItem,
-                            onClearShopCart = { viewModel.clearShopCart(group.shopName) },
-                            onNavigateToFitting = onNavigateToFitting
+                            onClearShopCart = { viewModel.clearShopCart(group.shopName) }
                     )
                 }
                 

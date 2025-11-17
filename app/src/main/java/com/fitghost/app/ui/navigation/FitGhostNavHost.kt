@@ -85,9 +85,7 @@ fun FitGhostNavHost(navController: NavHostController, modifier: Modifier = Modif
         // 상점 화면
         composable(FitGhostDestination.Shop.route) {
             ShopScreen(
-                    onNavigateToFitting = {
-                        navController.navigate(FitGhostDestination.Fitting.route)
-                    }
+                    navController = navController
             )
         }
 

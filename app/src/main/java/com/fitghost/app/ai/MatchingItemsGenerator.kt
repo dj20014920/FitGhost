@@ -59,6 +59,7 @@ Rules:
 
             val prompt = buildPrompt(itemDescription, itemCategory)
 
+            // 온디바이스 시도 (5초 타임아웃)
             val onDevice = runCatching {
                 generateWithOnDevice(prompt)
             }.getOrElse { error ->
@@ -71,8 +72,11 @@ Rules:
                 return@withContext Result.success(onDevice.take(MAX_CATEGORIES))
             }
 
+            // 클라우드 폴백 (10초 타임아웃)
             val cloud = runCatching {
-                generateWithCloud(prompt)
+                kotlinx.coroutines.withTimeout(10_000L) {
+                    generateWithCloud(prompt)
+                }
             }.getOrElse { error ->
                 Log.e(TAG, "Cloud generation failed", error)
                 emptyList()
@@ -83,6 +87,7 @@ Rules:
                 return@withContext Result.success(cloud.take(MAX_CATEGORIES))
             }
 
+            // 하드코딩 폴백
             Log.w(TAG, "Falling back to heuristics")
             Result.success(getFallbackCategories(itemCategory))
         } catch (e: Exception) {
@@ -209,18 +214,27 @@ Output:""".trimIndent()
             return emptyList()
         }
 
-        val assets = ensureOnDeviceAssets() ?: return emptyList()
-        val (modelPath, mmprojPath) = assets
-        val started = llamaController.ensureRunning(modelPath, mmprojPath)
-        if (!started) return emptyList()
+        return try {
+            // 온디바이스 AI에 5초 타임아웃 설정 (에뮬레이터는 매우 느림)
+            kotlinx.coroutines.withTimeout(5_000L) {
+                val assets = ensureOnDeviceAssets() ?: return@withTimeout emptyList()
+                val (modelPath, mmprojPath) = assets
+                val started = llamaController.ensureRunning(modelPath, mmprojPath)
+                if (!started) return@withTimeout emptyList()
 
-        val response = llamaController.generateJson(
-            systemPrompt = SYSTEM_PROMPT,
-            userPrompt = prompt,
-            temperature = 0.25f,
-            maxTokens = 192
-        )
-        return parseResponse(response)
+                Log.i(TAG, "On-device generation started (5s timeout)")
+                val response = llamaController.generateJson(
+                    systemPrompt = SYSTEM_PROMPT,
+                    userPrompt = prompt,
+                    temperature = 0.25f,
+                    maxTokens = 192
+                )
+                parseResponse(response)
+            }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.w(TAG, "On-device generation timeout (5s) - falling back to cloud")
+            emptyList()
+        }
     }
 
     private suspend fun ensureOnDeviceAssets(): Pair<String, String?>? {

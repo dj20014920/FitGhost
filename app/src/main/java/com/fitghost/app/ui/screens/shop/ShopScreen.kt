@@ -38,13 +38,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.text.NumberFormat
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShopScreen(
         modifier: Modifier = Modifier,
-        onNavigateToFitting: () -> Unit = {},
+        navController: androidx.navigation.NavHostController? = null,
         viewModel: ShopViewModel = viewModel(factory = ShopViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -66,19 +69,47 @@ fun ShopScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
-    // 이미지 선택 런처
+    // 이미지 선택 런처 (개선: null 체크 및 백그라운드 디코딩)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
-                viewModel.searchByImage(bitmap)
-            } catch (e: Exception) {
-                scope.launch {
-                    snackbarHostState.showSnackbar("이미지를 불러올 수 없습니다")
+            scope.launch {
+                try {
+                    // 백그라운드에서 이미지 디코딩 (UI 블로킹 방지)
+                    val bitmap = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.use { stream ->
+                            BitmapFactory.decodeStream(stream)
+                        }
+                    }
+                    
+                    if (bitmap == null) {
+                        snackbarHostState.showSnackbar(
+                            "이미지를 불러올 수 없습니다. 다른 이미지를 선택해주세요."
+                        )
+                        return@launch
+                    }
+                    
+                    // 이미지 크기 검증 (메모리 보호)
+                    if (bitmap.width <= 0 || bitmap.height <= 0) {
+                        snackbarHostState.showSnackbar(
+                            "유효하지 않은 이미지입니다. 다른 이미지를 선택해주세요."
+                        )
+                        bitmap.recycle()
+                        return@launch
+                    }
+                    
+                    viewModel.searchByImage(bitmap)
+                } catch (e: OutOfMemoryError) {
+                    snackbarHostState.showSnackbar(
+                        "이미지가 너무 큽니다. 더 작은 이미지를 선택해주세요."
+                    )
+                    Log.e("ShopScreen", "OOM while decoding image", e)
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar(
+                        "이미지를 불러올 수 없습니다: ${e.message ?: "알 수 없는 오류"}"
+                    )
+                    Log.e("ShopScreen", "Failed to load image", e)
                 }
             }
         }
@@ -111,7 +142,7 @@ fun ShopScreen(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                        text = "FitGhost Shop",
+                                        text = "TryOn Shop",
                                         fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.weight(1f))
@@ -298,11 +329,21 @@ fun ShopScreen(
                                 }
                             } else {
                                 items(wishlist) { product ->
-                                    ProductCard(
+                                    WishlistProductCard(
                                             product = product,
                                             onAddToCart = { viewModel.addToCart(product) },
                                             onToggleWishlist = {
                                                 viewModel.toggleWishlist(product)
+                                            },
+                                            onNavigateToFitting = { imageUrl ->
+                                                // 하단 탭을 피팅 탭으로 전환 (백스택 정리)
+                                                navController?.navigate(com.fitghost.app.ui.navigation.FitGhostDestination.Fitting.route) {
+                                                    popUpTo(navController.graph.startDestinationId) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                             }
                                     )
                                 }
@@ -355,13 +396,6 @@ fun ShopScreen(
                                         },
                                         onClearShopCart = {
                                             scope.launch { cartRepo.clearShopCart(group.shopName) }
-                                        },
-                                        onNavigateToFitting = { imageUrl ->
-                                            // FittingViewModel에 의상 이미지 URL 설정
-                                            com.fitghost.app.ui.screens.fitting.FittingViewModel.getInstance()
-                                                .setPendingClothingUrl(imageUrl)
-                                            // 피팅 화면으로 이동
-                                            onNavigateToFitting()
                                         },
                                         selectable = true,
                                         selectedItemIds = selectedItemIds,

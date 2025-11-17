@@ -27,9 +27,9 @@ import org.json.JSONObject
 class GeminiFashionService {
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)  // 20초 -> 15초
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)      // 60초 -> 30초
+        .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)     // 60초 -> 15초
         .build()
 
     companion object {

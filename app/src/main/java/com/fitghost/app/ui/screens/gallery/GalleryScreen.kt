@@ -154,7 +154,7 @@ private fun GalleryImageItem(path: String) {
                                             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
                                             put(
                                                     MediaStore.Images.Media.RELATIVE_PATH,
-                                                    "Pictures/FitGhost"
+                                                    "Pictures/TryOn"
                                             )
                                         }
                                 val uri =

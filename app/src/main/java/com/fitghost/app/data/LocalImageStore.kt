@@ -51,7 +51,7 @@ object LocalImageStore {
     fun saveToMediaStore(
             context: Context,
             file: File,
-            relativePath: String = "Pictures/FitGhost",
+            relativePath: String = "Pictures/TryOn",
             mimeType: String = "image/png",
             displayName: String = file.name
     ): Uri? {

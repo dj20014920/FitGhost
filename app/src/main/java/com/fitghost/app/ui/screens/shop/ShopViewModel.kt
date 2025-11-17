@@ -18,6 +18,7 @@ import com.fitghost.app.data.repository.ImageSearchResult
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import android.graphics.Bitmap
+import android.util.Log
 
 /** 상점 화면 ViewModel PRD: 검색 + 추천 상태 관리, API 연동 대비 */
 class ShopViewModel(
@@ -381,25 +382,55 @@ class ShopViewModel(
     }
     
     /** 이미지로 검색 (새 사진 업로드) */
-    fun searchByImage(bitmap: Bitmap) {
+    fun searchByImage(bitmap: Bitmap?) {
+        // Bitmap 유효성 검증
+        if (bitmap == null) {
+            viewModelScope.launch {
+                _events.emit(ShopUiEvent.Snackbar("유효하지 않은 이미지입니다."))
+            }
+            return
+        }
+        
+        if (bitmap.width <= 0 || bitmap.height <= 0) {
+            viewModelScope.launch {
+                _events.emit(ShopUiEvent.Snackbar("이미지 크기가 유효하지 않습니다."))
+            }
+            bitmap.recycle()
+            return
+        }
+        
         viewModelScope.launch {
             _isImageSearching.value = true
             try {
+                Log.d("ShopViewModel", "Starting image search: ${bitmap.width}x${bitmap.height}")
                 val result = shopRepository.searchByImage(bitmap)
                 result.fold(
                     onSuccess = { searchResult ->
                         _imageSearchResult.value = searchResult
                         _searchResults.value = searchResult.products
+                        Log.d("ShopViewModel", "Image search successful: ${searchResult.products.size} products")
                         _events.emit(ShopUiEvent.Snackbar("${searchResult.products.size}개의 상품을 찾았습니다"))
                     },
                     onFailure = { exception ->
-                        _events.emit(ShopUiEvent.Snackbar("이미지 검색 실패: ${exception.message}"))
+                        Log.e("ShopViewModel", "Image search failed", exception)
+                        val errorMessage = when {
+                            exception.message?.contains("timeout", ignoreCase = true) == true -> 
+                                "검색 시간이 초과했습니다. 다시 시도해주세요."
+                            exception.message?.contains("network", ignoreCase = true) == true -> 
+                                "네트워크 연결을 확인해주세요."
+                            exception.message?.contains("API key", ignoreCase = true) == true -> 
+                                "API 키 설정을 확인해주세요."
+                            else -> "이미지 검색 실패: ${exception.message ?: "알 수 없는 오류"}"
+                        }
+                        _events.emit(ShopUiEvent.Snackbar(errorMessage))
                     }
                 )
             } catch (e: Exception) {
+                Log.e("ShopViewModel", "Unexpected error in searchByImage", e)
                 _events.emit(ShopUiEvent.Snackbar("이미지 검색 중 오류가 발생했습니다"))
             } finally {
                 _isImageSearching.value = false
+                Log.d("ShopViewModel", "Image search completed")
             }
         }
     }

@@ -9,6 +9,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.awaitAll
 // Added for wishlist DataStore
 import android.content.Context
 import androidx.datastore.preferences.core.edit
@@ -211,36 +213,69 @@ class ShopRepositoryImpl(
 
     override suspend fun searchByImage(bitmap: Bitmap): Result<ImageSearchResult> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Searching by image")
+            Log.d(TAG, "Searching by image (${bitmap.width}x${bitmap.height})")
 
-            val taggerResult = com.fitghost.app.ai.cloud.GeminiTagger.tagImage(bitmap)
-            if (taggerResult.isFailure) {
-                return@withContext Result.failure(taggerResult.exceptionOrNull() ?: Exception("Tagging failed"))
-            }
+            // 전체 프로세스에 대한 타임아웃 설정 (45초)
+            val result = withTimeout(45_000L) {
+                // 1. 이미지 태깅 (Gemini API 호출)
+                val taggerResult = com.fitghost.app.ai.cloud.GeminiTagger.tagImage(bitmap)
+                if (taggerResult.isFailure) {
+                    Log.e(TAG, "Image tagging failed", taggerResult.exceptionOrNull())
+                    return@withTimeout Result.failure(
+                        taggerResult.exceptionOrNull() ?: Exception("Tagging failed")
+                    )
+                }
 
-            val metadata = com.fitghost.app.ai.cloud.GeminiTagger.toClothingMetadata(taggerResult.getOrThrow())
-            val itemDescription = "${metadata.color} ${metadata.detailType}"
-            val itemCategory = metadata.category
-
-            val categoriesResult = matchingItemsGenerator.generateMatchingCategories(
-                itemDescription,
-                itemCategory
-            )
-
-            val matchingCategories = categoriesResult.getOrElse { emptyList() }
-            val searchResults = coroutineScope {
-                matchingCategories.map { category ->
-                    async { searchProducts(category) }
-                }.map { it.await() }.flatten()
-            }
-
-            Result.success(
-                ImageSearchResult(
-                    sourceImage = itemDescription,
-                    matchingCategories = matchingCategories,
-                    products = searchResults.distinctBy { it.shopUrl }.take(20)
+                // 2. 태깅 결과를 ClothingMetadata로 변환
+                val metadata = com.fitghost.app.ai.cloud.GeminiTagger.toClothingMetadata(
+                    taggerResult.getOrThrow()
                 )
-            )
+                val itemDescription = "${metadata.color} ${metadata.detailType}".trim()
+                val itemCategory = metadata.category
+                
+                Log.d(TAG, "Tagged: $itemDescription ($itemCategory)")
+
+                // 3. 어울리는 카테고리 생성 (온디바이스 AI 또는 클라우드 폴백)
+                val categoriesResult = matchingItemsGenerator.generateMatchingCategories(
+                    itemDescription.ifBlank { metadata.detailType },
+                    itemCategory
+                )
+
+                val matchingCategories = categoriesResult.getOrElse { 
+                    Log.w(TAG, "Failed to generate categories, using empty list")
+                    emptyList() 
+                }
+                
+                Log.d(TAG, "Matching categories: $matchingCategories")
+
+                // 4. 각 카테고리로 상품 검색 (병렬 처리)
+                val searchResults = coroutineScope {
+                    matchingCategories.map { category ->
+                        async { 
+                            runCatching { searchProducts(category) }
+                                .getOrElse { error ->
+                                    Log.e(TAG, "Search failed for category: $category", error)
+                                    emptyList()
+                                }
+                        }
+                    }.awaitAll().flatten()
+                }
+                
+                Log.d(TAG, "Found ${searchResults.size} total products")
+
+                Result.success(
+                    ImageSearchResult(
+                        sourceImage = itemDescription.ifBlank { "이미지 검색" },
+                        matchingCategories = matchingCategories,
+                        products = searchResults.distinctBy { it.shopUrl }.take(20)
+                    )
+                )
+            }
+            
+            result
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.e(TAG, "Image search timeout after 45 seconds")
+            Result.failure(Exception("검색 시간이 초과했습니다. 다시 시도해주세요."))
         } catch (e: Exception) {
             Log.e(TAG, "Error in image search", e)
             Result.failure(e)
