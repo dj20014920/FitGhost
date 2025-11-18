@@ -983,27 +983,18 @@ private fun AIProductCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgPrimary
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        onClick = { openProductLink(context, product.shopUrl, "AIProductCard") }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { 
-                    // 상품 링크로 이동
-                    try {
-                        android.util.Log.d("AIProductCard", "Opening link: ${product.shopUrl}")
-                        uriHandler.openUri(product.shopUrl)
-                    } catch (e: Exception) {
-                        android.util.Log.e("AIProductCard", "링크 열기 실패: ${product.shopUrl}", e)
-                    }
-                }
                 .padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically

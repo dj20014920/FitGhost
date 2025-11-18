@@ -1,5 +1,8 @@
 package com.fitghost.app.ui.screens.shop
 
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,7 @@ import com.fitghost.app.ui.theme.Spacing
 import com.fitghost.app.ui.theme.IconSize
 import com.fitghost.app.ui.theme.CornerRadius
 import com.fitghost.app.ui.theme.ComponentSize
+import com.fitghost.app.util.Browser
 
 /**
  * 추천 코디 카드
@@ -123,7 +127,8 @@ private fun RecommendationProductItem(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgPrimary
         ),
-        shape = RoundedCornerShape(Spacing.lg)
+        shape = RoundedCornerShape(Spacing.lg),
+        onClick = { openProductLink(context, product.shopUrl, "RecommendationProductItem") }
     ) {
         Row(
             modifier = Modifier.padding(Spacing.lg),
@@ -251,7 +256,8 @@ fun ProductCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(Spacing.lg)
+        shape = RoundedCornerShape(Spacing.lg),
+        onClick = { openProductLink(context, product.shopUrl, "ProductCard") }
     ) {
         Row(
             modifier = Modifier.padding(Spacing.lg),
@@ -389,7 +395,8 @@ fun WishlistProductCard(
         colors = CardDefaults.cardColors(
             containerColor = FitGhostColors.BgSecondary
         ),
-        shape = RoundedCornerShape(Spacing.lg)
+        shape = RoundedCornerShape(Spacing.lg),
+        onClick = { openProductLink(context, product.shopUrl, "WishlistProductCard") }
     ) {
         Row(
             modifier = Modifier.padding(Spacing.lg),
@@ -522,6 +529,27 @@ fun WishlistProductCard(
                 }
             }
         }
+    }
+}
+
+private const val PRODUCT_LINK_TAG = "ShopProductLink"
+
+internal fun openProductLink(
+    context: Context,
+    url: String,
+    sourceTag: String = PRODUCT_LINK_TAG
+) {
+    if (url.isBlank()) {
+        Toast.makeText(context, "상품 링크를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+        Log.w(sourceTag, "Empty shopUrl for product link")
+        return
+    }
+
+    runCatching {
+        Browser.open(context, url)
+    }.onFailure { error ->
+        Log.e(sourceTag, "상품 링크 열기 실패: $url", error)
+        Toast.makeText(context, "상품 페이지를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
     }
 }
 
