@@ -37,3 +37,8 @@ tmp/*.gguf
 workers/**/.dev.vars
 workers/**/setup-secrets.sh
 **/test_*_proxy.sh
+
+# Additional files to ignore
+build_embedded.log
+NOWEND.md
+.claude/settings.local.json
