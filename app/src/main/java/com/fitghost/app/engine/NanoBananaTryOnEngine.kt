@@ -7,6 +7,7 @@ import android.util.Log
 import com.fitghost.app.BuildConfig
 import com.fitghost.app.utils.GeminiApiHelper
 import com.fitghost.app.utils.ImageUtils
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -135,6 +136,10 @@ class NanoBananaTryOnEngine(private val client: OkHttpClient = createHttpClient(
                     // 네트워크 에러 (오프라인 등)
                     Log.e(TAG, "Network error during virtual try-on", e)
                     throw GeminiApiHelper.GeminiApiException("인터넷 연결을 확인해주세요. 네트워크 오류가 발생했습니다.", e)
+                } catch (e: FileNotFoundException) {
+                    // 로컬 이미지가 삭제되었거나 접근 불가
+                    Log.e(TAG, "Local image missing for try-on", e)
+                    throw GeminiApiHelper.GeminiApiException("선택한 모델/의상 사진을 찾을 수 없습니다. 다시 선택한 후 시도해주세요.", e)
                 } catch (e: GeminiApiHelper.GeminiApiException) {
                     // Gemini API 에러
                     Log.e(TAG, "Gemini API error: ${e.message}", e)

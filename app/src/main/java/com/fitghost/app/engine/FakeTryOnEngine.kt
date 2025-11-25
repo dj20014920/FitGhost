@@ -3,6 +3,7 @@ package com.fitghost.app.engine
 import android.content.Context
 import android.graphics.*
 import android.net.Uri
+import java.io.FileNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -81,6 +82,7 @@ class FakeTryOnEngine : TryOnEngine {
 
     private fun loadBitmap(context: Context, uri: Uri): Bitmap {
         val stream = context.contentResolver.openInputStream(uri)
+                ?: throw FileNotFoundException("Image not found: $uri")
         return BitmapFactory.decodeStream(stream).also { stream?.close() }
     }
 }

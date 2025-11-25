@@ -48,6 +48,10 @@ import kotlinx.coroutines.launch
 import com.fitghost.app.engine.CompositeTryOnEngine
 import com.fitghost.app.BuildConfig
 
+import com.fitghost.app.data.repository.CreditRepositoryProvider
+import com.fitghost.app.util.AdManager
+import android.app.Activity
+
 /** 가상 피팅 화면 PRD: Try-On 프리뷰 생성/저장/갤러리 표출 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +68,19 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
     // 피팅 ViewModel (장바구니에서 전달된 의상 URL 처리)
     val fittingViewModel = remember { FittingViewModel.getInstance() }
     val pendingClothingUrl by fittingViewModel.pendingClothingUrl.collectAsState()
+
+    // Credit System
+    val creditRepository = remember { CreditRepositoryProvider.get() }
+    val regularCredits by creditRepository.regularCredits.collectAsState()
+    val extraCredits by creditRepository.extraCredits.collectAsState()
+    val totalCredits = regularCredits + extraCredits
+    var showAdDialog by remember { mutableStateOf(false) }
+
+    // Preload Ad and Refresh Credits
+    LaunchedEffect(Unit) {
+        launch { AdManager.loadRewardedAd(context) }
+        launch { creditRepository.refreshCredits() }
+    }
 
     var modelUri by remember { mutableStateOf<Uri?>(null) }
     var clothingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -119,6 +136,48 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
 
     val engine: TryOnEngine = remember { CompositeTryOnEngine() }
     // 정책: 추천/설명 텍스트 생성은 금지. 이미지 합성 지시문은 허용(기본 템플릿 적용됨).
+
+    // Ad Dialog
+    if (showAdDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdDialog = false },
+            title = { Text("크레딧 부족") },
+            text = { 
+                Column {
+                    Text("이번 주 무료 크레딧을 모두 사용하셨습니다.")
+                    Spacer(Modifier.height(8.dp))
+                    Text("광고를 시청하고 1 크레딧을 충전하시겠습니까?", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("(매주 월요일 00시 무료 크레딧 10개 초기화)", style = MaterialTheme.typography.bodySmall, color = FitGhostColors.TextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAdDialog = false
+                    val activity = context as? Activity
+                    if (activity != null) {
+                        AdManager.showRewardedAd(
+                            activity = activity,
+                            onUserEarnedReward = {
+                                creditRepository.addExtraCredit(1)
+                                scope.launch { snackbarHostState.showSnackbar("크레딧이 충전되었습니다!") }
+                            },
+                            onAdNotReady = {
+                                scope.launch { snackbarHostState.showSnackbar("광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.") }
+                            }
+                        )
+                    } else {
+                        scope.launch { snackbarHostState.showSnackbar("오류: Activity Context를 찾을 수 없습니다.") }
+                    }
+                }) {
+                    Text("광고 보고 충전")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdDialog = false }) { Text("취소") }
+            }
+        )
+    }
 
     if (showPreviewDialog && lastSavedFile != null) {
         AlertDialog(
@@ -184,6 +243,60 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
                                     color = FitGhostColors.TextPrimary,
                                     fontWeight = FontWeight.Bold
                             )
+                        },
+                        actions = {
+                            // Credit Display with breakdown
+                            val isOffline by creditRepository.isOfflineMode.collectAsState()
+                            
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isOffline) FitGhostColors.Error.copy(alpha = 0.1f) else FitGhostColors.BgSecondary,
+                                modifier = Modifier.padding(end = 16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isOffline) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "오프라인",
+                                            tint = FitGhostColors.Error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "오프라인",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = FitGhostColors.Error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Checkroom,
+                                            contentDescription = null,
+                                            tint = FitGhostColors.AccentPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Column {
+                                            Text(
+                                                text = "$totalCredits 크레딧",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = FitGhostColors.TextPrimary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (extraCredits > 0) {
+                                                Text(
+                                                    text = "무료 $regularCredits + 광고 $extraCredits",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = FitGhostColors.TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         },
                         colors =
                                 TopAppBarDefaults.topAppBarColors(
@@ -277,61 +390,76 @@ fun FittingScreen(modifier: Modifier = Modifier, onNavigateToGallery: () -> Unit
             // 4. 가상 피팅 프리뷰 생성 버튼 (최하단)
             item {
                 FittingActionButton(
-                        enabled = modelUri != null && clothingUris.isNotEmpty() && !isProcessing,
+                        enabled = modelUri != null && clothingUris.isNotEmpty() && !isProcessing && !creditRepository.isOfflineMode.collectAsState().value,
                         isProcessing = isProcessing,
                         onRun = {
-                            scope.launch {
-                                if (modelUri != null && clothingUris.isNotEmpty()) {
-                                    isProcessing = true
-
-                                    // 최종 프롬프트: 사용자가 입력한 프롬프트(없으면 엔진에서 기본 템플릿 주입)
-                                    var finalPrompt: String? = systemPrompt.ifBlank { null }
-                                    Log.d(
-                                            FIT_TAG,
-                                            "Initial systemPrompt present=${finalPrompt != null}"
-                                    )
-                                    // 요구사항: 텍스트 가이드/추천 로직 사용 금지. 오직 모델샷+의상 합성만 수행.
-// 기존 AI guidance 경로는 완전히 제거되었습니다.
-
-                                    try {
-                                        val result =
-                                                engine.renderPreview(
-                                                        context = context,
-                                                        modelUri = modelUri!!,
-                                                        clothingUris = clothingUris,
-                                                        systemPrompt = finalPrompt
-                                                )
-
-                                        val savedFile =
-                                                LocalImageStore.saveTryOnPng(context, result)
+                            // Offline Mode Protection
+                            if (creditRepository.isOfflineMode.value) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("오프라인 상태에서는 가상 피팅을 사용할 수 없습니다. 네트워크를 연결해주세요.")
+                                }
+                                return@FittingActionButton
+                            }
+                            
+                            // Credit Check
+                            if (creditRepository.consumeCredit()) {
+                                scope.launch {
+                                    if (modelUri != null && clothingUris.isNotEmpty()) {
+                                        isProcessing = true
+    
+                                        // 최종 프롬프트: 사용자가 입력한 프롬프트(없으면 엔진에서 기본 템플릿 주입)
+                                        var finalPrompt: String? = systemPrompt.ifBlank { null }
                                         Log.d(
                                                 FIT_TAG,
-                                                "Saved preview to: ${savedFile.absolutePath}"
+                                                "Initial systemPrompt present=${finalPrompt != null}"
                                         )
-
-                                        scope.launch {
-                                            lastSavedFile = savedFile
-                                            com.fitghost.app.data.LocalImageStore.refresh(context)
-                                            showPreviewDialog = true
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e(FIT_TAG, "Try-on generation failed", e)
-                                        scope.launch {
-                                            val msg = when {
-                                                e is javax.net.ssl.SSLPeerUnverifiedException ||
-                                                        (e.message?.contains("Hostname", ignoreCase = true) == true &&
-                                                         e.message?.contains("not verified", ignoreCase = true) == true) -> {
-                                                    // 개발자 가이드 메시지(디버그 빌드 가정)
-                                                    "Cloudflare 프록시 TLS 구성이 올바른지 확인하세요. local.properties의 PROXY_BASE_URL이 실제 워커 도메인과 일치해야 합니다."
-                                                }
-                                                else -> "가상 피팅 생성에 실패했습니다: ${e.message}"
+                                        // 요구사항: 텍스트 가이드/추천 로직 사용 금지. 오직 모델샷+의상 합성만 수행.
+    // 기존 AI guidance 경로는 완전히 제거되었습니다.
+    
+                                        try {
+                                            val result =
+                                                    engine.renderPreview(
+                                                            context = context,
+                                                            modelUri = modelUri!!,
+                                                            clothingUris = clothingUris,
+                                                            systemPrompt = finalPrompt
+                                                    )
+    
+                                            val savedFile =
+                                                    LocalImageStore.saveTryOnPng(context, result)
+                                            Log.d(
+                                                    FIT_TAG,
+                                                    "Saved preview to: ${savedFile.absolutePath}"
+                                            )
+    
+                                            scope.launch {
+                                                lastSavedFile = savedFile
+                                                com.fitghost.app.data.LocalImageStore.refresh(context)
+                                                showPreviewDialog = true
                                             }
-                                            snackbarHostState.showSnackbar(msg)
+                                        } catch (e: Exception) {
+                                            Log.e(FIT_TAG, "Try-on generation failed", e)
+                                            scope.launch {
+                                                val msg = when {
+                                                    e is javax.net.ssl.SSLPeerUnverifiedException ||
+                                                            (e.message?.contains("Hostname", ignoreCase = true) == true &&
+                                                             e.message?.contains("not verified", ignoreCase = true) == true) -> {
+                                                        // 개발자 가이드 메시지(디버그 빌드 가정)
+                                                        "Cloudflare 프록시 TLS 구성이 올바른지 확인하세요. local.properties의 PROXY_BASE_URL이 실제 워커 도메인과 일치해야 합니다."
+                                                    }
+                                                    else -> "가상 피팅 생성에 실패했습니다: ${e.message}"
+                                                }
+                                                snackbarHostState.showSnackbar(msg)
+                                                // Refund the consumed credit (using tracked type)
+                                                creditRepository.refundLastCredit()
+                                            }
+                                        } finally {
+                                            isProcessing = false
                                         }
-                                    } finally {
-                                        isProcessing = false
                                     }
                                 }
+                            } else {
+                                showAdDialog = true
                             }
                         }
                 )
