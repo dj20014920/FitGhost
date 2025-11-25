@@ -65,15 +65,11 @@
 
 ## 📸 앱 스크린샷
 
-| 홈 (날씨/추천) | 가상 피팅 결과 | 상점 AI 추천 | 장바구니 |
+| 홈 (날씨/추천) | 가상 피팅 결과 | 상점 AI 추천 카드 | 장바구니 |
 | --- | --- | --- | --- |
-| <img src="screens/screen_home.png" alt="홈 화면" width="220"> | <img src="screens/screen_fitting_preview.png" alt="가상 피팅 미리보기" width="220"> | <img src="screens/screen_shop_ai_list.png" alt="상점 AI 추천 리스트" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
+| <img src="screens/screen_home.png" alt="홈 화면" width="220"> | <img src="screens/screen_fitting_preview.png" alt="가상 피팅 미리보기" width="220"> | <img src="screens/screen_shop_ai_card.png" alt="상점 AI 추천 카드" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
 
-핵심 플로우 단계:
-- 가상 피팅: 모델 선택 → 의상 선택 → 미리보기까지 한 번에 확인
-- 상점: AI 추천 카드/리스트 기반으로 찜/장바구니 액션 수행
-
-세부 화면:
+가상 피팅 단계:
 
 | 모델 선택 | 의상 선택 | 미리보기 팝업 | 갤러리 (피팅 결과) |
 | --- | --- | --- | --- |
@@ -85,11 +81,11 @@
 | --- | --- |
 | <img src="screens/screen_wardrobe_add_photo.png" alt="아이템 사진 선택" width="220"> | <img src="screens/screen_wardrobe_add_details.png" alt="자동 태깅 결과" width="220"> |
 
-상점 즐겨찾기/장바구니:
+상점 플로우 (AI 추천 → 위시리스트 → 장바구니):
 
-| AI 추천 카드 | 위시리스트 | 장바구니 |
-| --- | --- | --- |
-| <img src="screens/screen_shop_ai_card.png" alt="AI 추천 카드" width="220"> | <img src="screens/screen_shop_wishlist.png" alt="위시리스트" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
+| AI 추천 카드 | AI 추천 리스트 | 위시리스트 | 장바구니 |
+| --- | --- | --- | --- |
+| <img src="screens/screen_shop_ai_card.png" alt="AI 추천 카드" width="220"> | <img src="screens/screen_shop_ai_list.png" alt="AI 추천 리스트" width="220"> | <img src="screens/screen_shop_wishlist.png" alt="위시리스트" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
 
 ### 프로젝트 구조
 
