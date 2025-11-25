@@ -65,21 +65,31 @@
 
 ## 📸 앱 스크린샷
 
-| 홈 (날씨/추천) | 가상 피팅 | 상점 | 옷장 |
+| 홈 (날씨/추천) | 가상 피팅 결과 | 상점 AI 추천 | 장바구니 |
 | --- | --- | --- | --- |
-| <img src="screens/screen_home.png" alt="홈 화면" width="220"> | <img src="screens/screen_fitting.png" alt="가상 피팅 화면" width="220"> | <img src="screens/screen_shop.png" alt="상점 화면" width="220"> | <img src="screens/screen_wardrobe.png" alt="옷장 화면" width="220"> |
+| <img src="screens/screen_home.png" alt="홈 화면" width="220"> | <img src="screens/screen_fitting_preview.png" alt="가상 피팅 미리보기" width="220"> | <img src="screens/screen_shop_ai_list.png" alt="상점 AI 추천 리스트" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
 
-설명 요약:
-- 홈: 실시간 날씨 카드, 모델 다운로드 CTA, 날씨 기반 추천 카드 노출
-- 가상 피팅: 모델/의상 선택, 크레딧 표시, 옷장 연동 버튼
-- 상점: 검색/AI추천/위시리스트/장바구니 탭, 카메라 업로드 진입점
-- 옷장: 필터/즐겨찾기/검색, 비어 있을 때 추가 안내
+핵심 플로우 단계:
+- 가상 피팅: 모델 선택 → 의상 선택 → 미리보기까지 한 번에 확인
+- 상점: AI 추천 카드/리스트 기반으로 찜/장바구니 액션 수행
 
-추가 화면:
+세부 화면:
 
-| 위시리스트 | 장바구니 | 갤러리(피팅 결과) |
+| 모델 선택 | 의상 선택 | 미리보기 팝업 | 갤러리 (피팅 결과) |
+| --- | --- | --- | --- |
+| <img src="screens/screen_fitting_model.png" alt="모델 선택" width="220"> | <img src="screens/screen_fitting_cloth.png" alt="의상 선택" width="220"> | <img src="screens/screen_fitting_preview.png" alt="피팅 결과 미리보기" width="220"> | <img src="screens/screen_gallery_fitting.png" alt="갤러리 피팅 결과" width="220"> |
+
+옷장 / 아이템 추가:
+
+| 아이템 사진 선택 | 자동 태깅/입력 결과 |
+| --- | --- |
+| <img src="screens/screen_wardrobe_add_photo.png" alt="아이템 사진 선택" width="220"> | <img src="screens/screen_wardrobe_add_details.png" alt="자동 태깅 결과" width="220"> |
+
+상점 즐겨찾기/장바구니:
+
+| AI 추천 카드 | 위시리스트 | 장바구니 |
 | --- | --- | --- |
-| <img src="screens/screen_wishlist.png" alt="위시리스트" width="220"> | <img src="screens/screen_cart.png" alt="장바구니" width="220"> | <img src="screens/screen_gallery.png" alt="갤러리" width="220"> |
+| <img src="screens/screen_shop_ai_card.png" alt="AI 추천 카드" width="220"> | <img src="screens/screen_shop_wishlist.png" alt="위시리스트" width="220"> | <img src="screens/screen_shop_cart.png" alt="장바구니" width="220"> |
 
 ### 프로젝트 구조
 
