@@ -63,6 +63,24 @@
 | **설정 저장** | DataStore Preferences | 1.1.1 | 타입 안전 Key-Value 저장소 |
 | **광고** | Google Mobile Ads | 23.0.0 | AdMob 보상형 광고 SDK |
 
+## 📸 앱 스크린샷
+
+| 홈 (날씨/추천) | 가상 피팅 | 상점 | 옷장 |
+| --- | --- | --- | --- |
+| <img src="screens/screen_home.png" alt="홈 화면" width="220"> | <img src="screens/screen_fitting.png" alt="가상 피팅 화면" width="220"> | <img src="screens/screen_shop.png" alt="상점 화면" width="220"> | <img src="screens/screen_wardrobe.png" alt="옷장 화면" width="220"> |
+
+설명 요약:
+- 홈: 실시간 날씨 카드, 모델 다운로드 CTA, 날씨 기반 추천 카드 노출
+- 가상 피팅: 모델/의상 선택, 크레딧 표시, 옷장 연동 버튼
+- 상점: 검색/AI추천/위시리스트/장바구니 탭, 카메라 업로드 진입점
+- 옷장: 필터/즐겨찾기/검색, 비어 있을 때 추가 안내
+
+추가 화면:
+
+| 위시리스트 | 장바구니 | 갤러리(피팅 결과) |
+| --- | --- | --- |
+| <img src="screens/screen_wishlist.png" alt="위시리스트" width="220"> | <img src="screens/screen_cart.png" alt="장바구니" width="220"> | <img src="screens/screen_gallery.png" alt="갤러리" width="220"> |
+
 ### 프로젝트 구조
 
 ```
@@ -749,7 +767,7 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일 참조
 
 ## 👨‍💻 개발자 정보
 
-**프로젝트명**: FitGhost (ghostfit)  
+**프로젝트명**: Tryon (ghostfit)  
 **플랫폼**: Android  
 **언어**: Kotlin  
 **최소 SDK**: 26 (Android 8.0 Oreo)  
@@ -764,7 +782,7 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일 참조
 - **Singleton Pattern**: CreditRepository, AdManager 전역 관리
 
 ### 코드 품질 원칙
-- **DRY** (Don't Repeat Yourself): 중복 코드 326줄 제거
+- **DRY** (Don't Repeat Yourself): 중복 코드 제거
 - **KISS** (Keep It Simple, Stupid): 과도한 추상화 지양
 - **YAGNI** (You Aren't Gonna Need It): 필요한 기능만 구현
 - **SOLID**: 단일 책임 원칙, 인터페이스 분리 등
@@ -775,9 +793,6 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일 참조
 ## 📚 참고 문서
 
 - **제품 요구사항**: [MASTERPRD_UNIFIED.md](MASTERPRD_UNIFIED.md)
-- **현황 보고서**: [NOWEND.md](NOWEND.md)
-- **프로젝트 가이드**: [NOWGUIDE.md](NOWGUIDE.md)
-- **빌드 로그**: [build.log](build.log)
 
 ---
 
