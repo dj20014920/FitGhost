@@ -66,7 +66,7 @@
 ## 🎥 시연 영상 (Demo)
 
 <div align="center">
-  <a href="screens/demo_video.webm">
+  <a href="screens/demo_video.mp4">
     <img src="screens/demo_thumbnail.png" width="100%" alt="시연 영상 재생">
   </a>
 </div>
