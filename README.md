@@ -66,13 +66,13 @@
 ## 🎥 시연 영상 (Demo)
 
 <div align="center">
-  <video src="screens/demo_video.webm" width="100%" controls autoplay muted loop>
-    브라우저가 비디오 태그를 지원하지 않습니다.
-  </video>
+  <a href="screens/demo_video.webm">
+    <img src="screens/demo_thumbnail.png" width="100%" alt="시연 영상 재생">
+  </a>
 </div>
 
 <div align="center">
-  <i>* 1분 시연 영상 (앱의 주요 기능을 확인하세요)</i>
+  <i>* 1분 시연 영상 (이미지를 클릭하면 재생됩니다)</i>
 </div>
 
 <br>
