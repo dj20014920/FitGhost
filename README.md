@@ -63,6 +63,20 @@
 | **설정 저장** | DataStore Preferences | 1.1.1 | 타입 안전 Key-Value 저장소 |
 | **광고** | Google Mobile Ads | 23.0.0 | AdMob 보상형 광고 SDK |
 
+## 🎥 시연 영상 (Demo)
+
+<div align="center">
+  <video src="screens/demo_video.webm" width="100%" controls autoplay muted loop>
+    브라우저가 비디오 태그를 지원하지 않습니다.
+  </video>
+</div>
+
+<div align="center">
+  <i>* 1분 시연 영상 (앱의 주요 기능을 확인하세요)</i>
+</div>
+
+<br>
+
 ## 📸 앱 스크린샷
 
 | 홈 (날씨/추천) | 가상 피팅 결과 | 상점 AI 추천 카드 | 장바구니 |
