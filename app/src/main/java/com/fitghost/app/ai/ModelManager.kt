@@ -203,23 +203,11 @@ class ModelManager private constructor(private val context: Context) {
                     }
                 }
 
-                // HTTP 클라이언트 - 커스텀 DNS로 에뮬레이터 DNS 문제 해결
+                // HTTP 클라이언트 - CDN 도메인의 현재 DNS 설정을 사용한다.
                 val client = OkHttpClient.Builder()
                     .connectTimeout(java.time.Duration.ofSeconds(30))
                     .readTimeout(java.time.Duration.ofMinutes(30))
                     .writeTimeout(java.time.Duration.ofMinutes(30))
-                    .dns(object : okhttp3.Dns {
-                        override fun lookup(hostname: String): List<java.net.InetAddress> {
-                            return if (hostname == "cdn.emozleep.space") {
-                                // 안드로이드 에뮬레이터 DNS 문제 해결: 직접 IP 반환
-                                Log.d(TAG, "Custom DNS: $hostname -> ${AiConfig.CDN_IP_ADDRESS}")
-                                listOf(java.net.InetAddress.getByName(AiConfig.CDN_IP_ADDRESS))
-                            } else {
-                                // 다른 도메인은 시스템 DNS 사용
-                                okhttp3.Dns.SYSTEM.lookup(hostname)
-                            }
-                        }
-                    })
                     .addInterceptor { chain ->
                         val request = chain.request()
                         Log.d(TAG, "HTTP Request: ${request.method} ${request.url}")
